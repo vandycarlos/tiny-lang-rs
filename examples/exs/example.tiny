@@ -1,0 +1,93 @@
+
+(import [tiny.core :refer-all])
+
+; Comment
+
+(def n 				 1
+     n1        10
+     n2        10.1
+     str1      "a"
+     str2      ""
+     str2      """a"""
+
+     quoted    'quoted
+     keyword   :keyword
+     quote      \quote)
+
+; Sample data
+(def data [1 "one" 'two 4000])
+
+(defn print-name [data]
+  (print data.name))
+
+(defn double (v)
+  (* 2 v))
+
+(defn blip ($ &*)
+  (+ $ &*))
+
+(defstruct person
+  (name       type: lib/string value: "Paul")
+  (address    type: lib/string value: "Z Street")
+  (birth-date type: lib/date))
+
+; Sample data
+(def data
+  (person name: "Carlos"
+          address: "Main Avenue"
+          birth-date: #date:79-10-11))
+
+; Sample data
+(def data {name: "Carlos"
+           address: "Z Street"
+           birth-date: #date:79-10-11})
+
+(defstruct person
+  (name       :type lib/string :value "Paul")
+  (address    :type lib/string :value "Z Street")
+  (birth-date :type lib/date))
+
+; Sample data
+(def data
+  (person :name "Carlos"
+          :address "Main Avenue"
+          :birth-date #date:79-10-11))
+
+; Sample data
+(def data {:name "Carlos"
+           :address "Z Street"
+           :birth-date #date:79-10-11})
+
+(def string-multiline-single-quoted
+  "
+  Hello
+  from
+  mutiline
+  string
+  ")
+
+(def string-multiline-triple-quoted
+  """
+  Hello
+  from
+  mutiline
+  string
+  """)
+
+(def string-multiline-quadruple-quoted
+  """"
+  Hello
+  from
+  mutiline
+  string
+  """")
+
+(def string-multiline-quadruple-quoted-with-nested-string
+  """"
+  Hello
+	"""
+  from
+	"""
+  mutiline
+  string
+  """")

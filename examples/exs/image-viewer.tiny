@@ -1,0 +1,109 @@
+
+;; Image upload with a drag and drop zone. See image previews!
+
+(import Task
+        Browser
+        [Html :refer-all]
+        [File :refer File]
+        [Json.Decode :as D]
+        [File.Select :as Select]
+        [Html.Events :refer-all]
+        [Html.Attributes :refer-all])
+
+;; MAIN
+
+(def main
+  (Browser/element init: init
+                   view: view
+                   update: update
+
+                   subscriptions: subscriptions))
+
+;; MODEL
+
+(defstruct Model
+  (hover    Bool)
+  (previews (List String)))
+
+(defn init [_] [(Model False []) Cmd.none])
+
+;; UPDATE
+
+(defenum Msg
+  (Pick)
+  (DragEnter)
+  (DragLeave)
+  (GotFiles File (List File))
+  (GotPreviews (List String)))
+
+(defn update [msg model]
+  (match msg
+    Pick
+    [model (Select/files ["image/*"] GotFiles)]
+
+    DragEnter
+    [(assoc model hover: True) Cmd.none]
+
+    DragLeave
+    [(assoc model hover: False) Cmd.none]
+
+    (GotFiles file files)
+    [(assoc model hover: False)
+     (Task/perform GotPreviews (Task/sequence (List/map File.toUrl (cons file files))))]
+
+    (GotPreviews urls)
+    [(assoc model previews: urls) Cmd.none]))
+
+;; SUBSCRIPTIONS
+
+(defn subscriptions [model] Sub.none)
+
+;; VIEW
+
+(defn view [model]
+  (div [(style :border ["6*px" :dashed (if model.hover :purple "#ccc")]
+               :border-radius "20*px"
+               :width "480*px"
+               :margin ["100*px" :auto]
+               :padding "40*px"
+               :display :flex
+               :flex-direction :column
+               :justify-content :center
+               :align-items :center)
+        (hijackOn :dragenter (D/succeed DragEnter))
+        (hijackOn :dragover (D/succeed DragEnter))
+        (hijackOn :dragleave (D/succeed DragLeave))
+        (hijackOn :drop dropDecoder)]
+       (button {:on-click Pick :text "Upload Images"})
+       (div {:style {:display :flex
+                     :align-items :center
+                     :height "60*px"
+                     :padding "20*px"}}
+         (List/map viewPreview model.previews))))
+
+(defn viewPreview [url]
+  (div {:style {:width "60*px"
+                :height "60*px"
+                :background-image (strf "url('{}')" url)
+                :background-position :center
+                :background-repeat :no-repeat
+                :background-size :contain}}))
+
+(def dropDecoder
+  (D/at ["dataTransfer" "files"]
+
+        (D/oneOrMore GotFiles File.decoder)))
+
+(defn hijackOn [event decoder]
+  (preventDefaultOn event (D/map hijack decoder)))
+
+(defn hijack [msg] [msg True])
+
+(sig init [() -> Model (Cmd Msg)])
+(sig update [Msg Model -> Model (Cmd Msg)])
+(sig subscriptions [Model -> Sub Msg])
+(sig view [Model -> Html Msg])
+(sig viewPreview [String -> Html msg])
+(sig dropDecoder (D/Decoder Msg))
+(sig hijackOn [Keyword (D/Decoder msg) -> (Attribute msg)])
+(sig hijack [msg -> msg Bool])

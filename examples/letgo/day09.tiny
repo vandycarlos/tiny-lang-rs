@@ -1,0 +1,17 @@
+
+(def dirs {"U" [0 -1] "D" [0 1] "R" [1 0] "L" [-1 0]})
+
+(def data (->> "input/day9.txt" slurp lines
+               (mapcat #(let [[d n] (split %1 " ")] (repeat (parse-long n) (dirs d))))
+               (reductions #(mapv + %1 %2) [0 0])))
+
+(defn next-pos [[tx ty] [hx hy]]
+  (let [sign (fn [x] (cond (zero? x) x (< x 0) -1 1))]
+    (if (or (-> tx (- hx) abs (> 1)) (-> ty (- hy) abs (> 1)))
+      [(+ tx (sign (- hx tx))) (+ ty (sign (- hy ty)))]
+      [tx ty])))
+
+(defn main []
+  (let [paths (iterate (reductions next-pos %*) data)]
+    (println "1:" (->> paths second (map str) set count))
+    (println "2:" (->> (nth paths 9) (map str) set count))))

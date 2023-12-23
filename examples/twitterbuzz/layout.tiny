@@ -1,0 +1,98 @@
+; Copyright (c) Rich Hickey. All rights reserved.
+; The use and distribution terms for this software are covered by the
+; Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
+; which can be found in the file epl-v10.html at the root of this distribution.
+; By using this software in any fashion, you are agreeing to be bound by
+; the terms of this license.
+; You must not remove this notice, or any other, from this software.
+
+(import [app.anneal :as ann]
+        [app.radial :as rad]
+        [goog.math :as math]
+        [js/global :refer [Math]])
+
+(defn random-loc []
+  {:x (ann/random) :y (ann/random)})
+
+(defn sqr [x]
+  (* x x))
+
+(defn sqrt [x]
+  (Math.sqrt x))
+
+(defn dist [p1 p2]
+  (sqrt (+ (sqr (- p2.x p1.x)) (sqr (- p2.y p1.y)))))
+
+(defn init-state [mentions-data]
+  (let [connected (reduce (fn [ret [k v]]
+                            (if (pos? (count v.mentions))
+                              (into (conj ret k) (keys v.mentions))
+                              ret)
+                          #S[] mentions-data))
+        mentions-data (select-keys mentions-data connected)]
+    {:locs (zipmap connected (repeatedly #(random-loc)))
+     :mentions mentions-data}))
+
+(defn roots [mentions-data]
+  (let [parents (reduce (fn [ret [k v]]
+                          (if (pos? (count v.mentions))
+                            (conj ret k)
+                            ret))
+                        (set) mentions-data)]
+    (reduce disj parents (mapcat #(keys (:mentions %)) (vals mentions-data)))))
+
+(defn radial [mentions-data]
+  (let [mentions #(rad/get-mentions mentions-data %1)
+        weights (rad/weights
+                 (into (set (roots mentions-data)) (mapcat mentions (keys mentions-data)))
+                 mentions)]
+    {:mentions mentions-data
+     :locs (-> (rad/layout (roots mentions-data) weights mentions)
+               (rad/polar->cartesian 3))}))
+
+(defn score [s]
+  (let [metric (fn [d w] (sqr (- 1 (* d w))))
+        score-user (fn [[k s2]]
+                     (if (zero? (count s2.mentions))
+                       0
+                       (let [loc (s.locs k)]
+                         (reduce (fn [score [ok w]]
+                                   (+ score (metric (dist loc (s.locs ok)) w)))
+                                 0
+                                 s2.mentions))))]
+    (reduce + (map score-user s.mentions))))
+
+(defn permute-swap [t1 t]
+  ;;first cut - swap
+  (let [xys (vec (vals t1.locs))
+        swap1 (math/randomInt (count xys))
+        swap2 (math/randomInt (count xys))
+        temp (xys swap1)
+        xys (assoc xys swap1 (xys swap2))
+        xys (assoc xys swap2 temp)]
+    {:locs (zipmap (keys t1.locs) xys)
+     :mentions t1.mentions}))
+
+(defn permute-move [t1 t]
+  (let [adj #(min 1.0 (max 0 (+ %1 (- (* (ann/random) 0.1) 0.05))))
+        move (fn [loc]
+               (if true ;;(> (ann/random) 0.8)
+                 {:x (adj loc.x)
+                  :y (adj loc.y)}
+                 loc))
+        xys (vec (vals t1.locs))]
+    {:locs (zipmap (keys t1.locs) (map move (vals t1.locs)))
+     :mentions t1.mentions}))
+
+(comment
+  (def test-data {})
+
+  (def init (init-state test-data))
+
+  (map (fn [x] {:best-score (:best-score x) :t (:t x)})
+       (take 10 (take-nth 100
+                  (ann/anneal score
+                              (ann/linear-cooling 1000)
+                              permute-move
+                              ann/standard-prob
+                              init)))))

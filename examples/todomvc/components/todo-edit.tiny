@@ -1,0 +1,31 @@
+
+(import [reagent.core :as r]
+        [app.actions :as actions]
+        [app.helpers :as helpers])
+
+(defn on-key-down [k id title default editing]
+  (let [key-pressed (p/which k)]
+    (condp = key-pressed
+      helpers/enter-key (actions/save-todo id title editing)
+      helpers/escape-key (do (reset! title default)
+                             (reset! editing false))
+      nil)))
+
+(defn render [todo editing]
+  (let [default todo.title
+        edit-title (r/atom default)]
+    (fn []
+      (d/input {:type :text
+      				  :class :edit
+                :style {:display (helpers/display-elem @editing)}
+                :value @edit-title
+                :on-change #(reset! edit-title (-> % p/target p/value))
+                :on-blur #(actions/save-todo todo.id edit-title editing)
+                :on-key-down #(on-key-down % todo.id edit-title default editing)}))))
+
+(defn did-update [x]
+  (m/focus (r/dom-node x)))
+
+(defn component []
+  (r/create-class {:render render
+                   :component-did-update did-update}))

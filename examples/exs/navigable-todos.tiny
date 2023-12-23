@@ -1,0 +1,218 @@
+
+(import
+  Random
+  [Url :refer [Ur]]
+  [Html :refer-all]
+  [Browser.UrlRequest :refer-all]
+  [Browser.Navigation :as Nav :refer [Key]]
+  [Browser :refer [Document application]]
+  [Html.Events :refer [onClick onDoubleClick onInput onSubmit]]
+  [Html.Attributes :refer [autofocus checked class href placeholder style type value]])
+
+(defenum Msg
+  (UpdateText String)
+  (GenerateTodoId)
+  (AddTodo Int)
+  (RemoveTodo Int)
+  (Edit Int String)
+  (EditSave Int String)
+  (ToggleTodo Int)
+  (SetFilter Filter)
+  (LinkClicked UrlRequest)
+  (ChangeUrl Url))
+
+(defenum Filter
+  All
+  Incomplete
+  Completed)
+
+(defstruct TodoEdit
+  (id Int)
+  (text String))
+
+(defstruct Todo
+  (id Int)
+  (text String)
+  (completed Bool))
+
+(defstruct Model
+  (text String)
+  (todos (List Todo))
+  (editing (Maybe TodoEdit))
+  (filter Filter)
+  (navigationKey Key))
+
+(defn view [model]
+  {:title "Navigation TODOs"
+   :body (viewBody model)})
+
+(defn viewBody [model]
+  (d/div {:class [:col-12 :col-sm-6 :offset-sm-3]}
+    (d/form {:class :row :on-submit GenerateTodoId}
+      (d/div {:class :col-9}
+        (d/input {:on-input UpdateText
+                  :value model.text
+                  :autofocus True
+                  :class :form-control
+                  :placeholder "Enter a todo"}))
+      (d/div {:class :col-3}
+        (d/button {:class [:btn :btn-primary :form-control]}
+          (d/text "+")))
+    (viewFilters model.filter)
+    (d/div (List/map (viewTodo model.editing)
+                     (filterTodos model.filter model.todos))))))
+
+(defn filterTodos [filter todos]
+  (case filter
+    All
+    todos
+
+    Incomplete
+    (List/filter #(not (p/completed %)) todos)
+
+    Completed
+    (List/filter #(p/completed %) todos)))
+
+(defn viewFilters [filter]
+  (div (viewFilter All (= filter All) "All")
+       (viewFilter Incomplete (= filter Incomplete) "Incomplete")
+       (viewFilter Completed (= filter Completed) "Completed")))
+
+(defn viewFilter [filter isFilter filterText]
+  (if isFilter
+    (d/span {:class :mr-3 :text filterText})
+    (d/a {:class [:text-primary :mr-3]
+          :href (str "#" (String/toLower filterText))
+          :on-click (SetFilter filter)
+          :style {:cursor :pointer}}
+      (d/text filterText))))
+
+(defn viewTodo [editing todo]
+  (case editing
+    (Some todoEdit)
+    (if (= todoEdit.id todo.id)
+      (viewEditTodo todoEdit)
+      (viewNormalTodo todo))
+
+    None
+    (viewNormalTodo todo)))
+
+(defn viewEditTodo [todoEdit]
+  (d/div {:class :card}
+    (d/div {:class :card-block}
+      (d/form {:on-submit (EditSave todoEdit.id todoEdit.text)}
+        (d/input {:on-input (Edit todoEdit.id)
+                  :class :form-control
+                  :value todoEdit.text})))))
+
+(defn viewNormalTodo [todo]
+  (d/div {:class :card}
+    (d/div {:class :card-block}
+      (d/input {:on-click (ToggleTodo todo.id)
+                :type :checkbox
+                :checked todo.completed
+                :class :mr-3})
+      (d/span {:on-double-click (Edit todo.id todo.text)
+               :style {:text-decoration (if todo.completed
+                                          :line-through
+                                          :none)}}
+        (d/text todo.text))
+      (d/span {:onClick (RemoveTodo todo.id) :class :float-right}
+        (d/text "✖")))))
+
+(defn update [msg model]
+  (case msg
+    (UpdateText newText)
+    [(assoc model text: newText) Cmd.none]
+
+    GenerateTodoId
+    [model (Random/generate AddTodo (Random/int Random/minInt Random/maxInt))]
+
+    (AddTodo todoId)
+    (let [newTodos (++ model.todos [(Todo todoId model.text False)])]
+      [(assoc model text: "" todos: newTodos) (saveTodos newTodos)])
+
+    (RemoveTodo todoId)
+    (let [newTodos (List/filter (fn [todo] (/= todo.id todoId)) model.todos)]
+      [(assoc model todos: newTodos) (saveTodos newTodos)])
+
+    (Edit todoId todoText)
+    [(assoc model editing: (Some {id: todoId text: todoText})) Cmd.none]
+
+    (EditSave todoId todoText)
+    (let [newTodos (List/map (fn [todo]
+                               (if todo.id == todoId then
+                                 (assoc todo text: todoText)
+                                 todo))
+                             model.todos)]
+      [(assoc model editing: None todos: newTodos) (saveTodos newTodos)])
+
+    (ToggleTodo todoId)
+    (let [newTodos (List/map (fn [todo]
+                               (if (= todo.id todoId)
+                                 (assoc todo completed: (not todo.completed))
+                                 todo))
+                              model.todos)]
+      [(assoc model todos: newTodos) (saveTodos newTodos)])
+
+    (SetFilter filter)
+    [(assoc model filter: filter) Cmd.none]
+
+    (LinkClicked urlRequest)
+    (case urlRequest
+        (Browser/Internal url)
+        [model (Nav/pushUrl model.navigationKey (Url/toString url))]
+
+        (Browser/External url)
+        [model (Nav/load url)])
+
+    (ChangeUrl url)
+    [(assoc model filter: (urlToFilter url)) Cmd.none]))
+
+(defn urlToFilter [url]
+  (case Url/fragment
+    None
+    All
+
+    (Some hash)
+    (case (String/toLower hash)
+      :incomplete Incomplete
+      :completed Completed
+      All)))
+
+(defport saveTodos [(List Todo) -> (Cmd msg)])
+
+(defn subscriptions [model] Sub.none)
+
+(defn init [flags url navigationKey]
+  [(assoc text: ""
+          todos: flags.todos
+          editing: Nothing
+          filter: (urlToFilter url)
+          navigationKey: navigationKey)
+   Cmd.none])
+
+(defstruct Flags
+  (todos (List Todo)))
+
+(def main
+  (application init: init
+               view: view
+               update: update
+               subscriptions: subscriptions
+               onUrlRequest: LinkClicked
+               onUrlChange: ChangeUrl))
+
+(sig view [Model -> (Document Msg)])
+(sig viewBody [Model -> (Html Msg)])
+(sig filterTodos [Filter (List Todo) -> (List Todo)])
+(sig viewFilters [Filter -> (Html Msg)])
+(sig urlToFilter [Url -> Filter])
+(sig viewFilter [Filter Bool String -> (Html Msg)])
+(sig viewTodo [(Maybe TodoEdit) Todo -> (Html Msg)])
+(sig viewEditTodo [TodoEdit -> (Html Msg)])
+(sig viewNormalTodo [Todo -> (Html Msg)])
+(sig update [Msg Model -> [Model (Cmd Msg)]])
+(sig subscriptions [Model -> (Sub Msg)])
+(sig init [Flags Url Key -> Model (Cmd Msg)])
+(sig main (Program Flags Model Msg))

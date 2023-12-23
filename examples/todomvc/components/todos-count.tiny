@@ -1,0 +1,13 @@
+
+(import [app.session :as session]
+        [app.helpers :as helpers])
+
+(defn items-left [todos]
+  (let [active-count (count (helpers/todos-active todos))]
+    (str (if (= 1 active-count) " item " " items ")
+         "left")))
+
+(defn component []
+  (d/span {:class :todo-count}
+    (d/strong (count (helpers/todos-active @session/todos)))
+    (items-left @session/todos)))

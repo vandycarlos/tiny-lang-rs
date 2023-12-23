@@ -1,0 +1,5 @@
+
+(defn -main [& args]
+  (->> (map [\space "world" "hello"] [2 0 1])
+       (apply str)
+       (println)))

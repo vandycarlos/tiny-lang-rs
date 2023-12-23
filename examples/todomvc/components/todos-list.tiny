@@ -1,0 +1,7 @@
+
+(import [app.components.todo-item :as todo-item])
+
+(defn component [todos]
+  (d/ul {:class :todo-list}
+    (for [todo todos]
+      (todo-item/component {:key (:id todo)} todo))))

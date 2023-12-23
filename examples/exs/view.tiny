@@ -1,0 +1,44 @@
+
+(import [lib.dom :as d]
+        [lib.react :as r]
+        [js/global :refer [parseInt]])
+
+(defn bmi-component []
+  (let [v @bmi-data
+        [color diagnose] (cond (< v.bmi 18.5) ["orange" "underweight"]
+                               (< v.bmi 25) ["inherit" "normal"]
+                               (< v.bmi 30) ["orange" "overweight"]
+                               ["red" "obese"])]
+    (d/div
+      (d/h3 "BMI calculator")
+      (d/div "Height: " (int v.height) "cm"
+             (d/slider :height v.height 100 220 :bmi))
+      (d/div "Weight: " (int v.weight) "kg"
+             (d/slider :weight v.weight 30 150 :bmi))
+      (d/div "BMI: " (int v.bmi) " "
+             (d/span {:style {:color color}} diagnose)
+             (slider :bmi v.bmi 10 50 :weight)))))
+
+(defn slider [param value min max invalidates]
+  (d/input {:type :range
+            :value value
+            :min min
+            :max max
+            :style {:width "100%"}
+            :on-change (fn [e]
+                         (let [new-value (parseInt e.target.value)]
+                           (swap! bmi-data
+                             (fn [data]
+                               (-> data
+                                 (assoc param new-value)
+                                 (dissoc invalidates)
+                                 calc-bmi)))))}))
+
+(def bmi-data
+  (r/atom (calc-bmi {:height 180 :weight 80})))
+
+(defn calc-bmi [{:name data :keys [height weight bmi]}]
+  (let [h (/ height 100)]
+    (if (nil? bmi)
+      (assoc data :bmi (/ weight (* h h)))
+      (assoc data :weight (* bmi h h)))))

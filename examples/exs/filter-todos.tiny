@@ -1,0 +1,178 @@
+
+(import [Html :refer-all]
+        [Browser :refer-all]
+        [Html.Events :refer [onClick onDoubleClick onInput onSubmit]]
+        [Html.Attributes :refer [autofocus checked class placeholder style type value]])
+
+(defenum Msg
+  (AddTodo)
+  (UpdateText String)
+  (RemoveTodo Int)
+  (Edit Int String)
+  (EditSave Int String)
+  (ToggleTodo Int)
+  (SetFilter Filter))
+
+(defenum Filter
+  All
+  Incomplete
+  Completed)
+
+(defstruct TodoEdit
+  (index Int)
+  (text  String))
+
+(defstruct Todo
+  (text      String)
+  (completed Bool))
+
+(defstruct Model
+  (text    String)
+  (todos   (List Todo))
+  (editing (Maybe TodoEdit))
+  (filter  Filter))
+
+(defn view [model]
+  (div {:class [:col-12 :col-sm-6 :offset-sm-3]}
+    (form {:class :row :on-submit AddTodo}
+      (div {:class :col-9}
+        (input {:on-input UpdateText
+                :value model.text
+                :autofocus True
+                :class :form-control
+                :placeholder "Enter a todo"}))
+      (div {:class :col-3}
+        (button {:class [:btn :btn-primary :form-control]
+                 :text "+"})))
+    (viewFilters model.filter)
+    (div (List/indexedMap
+           (viewTodo model.editing)
+           ;; We now filter the todos based on the current filter
+           (filterTodos model.filter model.todos)))))
+
+;; Returns the todos that should be displayed based on what the filter is.
+
+(defn filterTodos [filter todos]
+  (case filter
+    All todos
+    Incomplete (List/filter (fn [t] (not t.completed)) todos)
+    Completed  (List/filter (fn [t] t.completed) todos)))
+
+;; Added the HTML representation of the filters.
+
+(defn viewFilters [filter]
+  (div (viewFilter All (= filter All) "All")
+       (viewFilter Incomplete (= filter Incomplete) "Incomplete")
+       (viewFilter Completed (= filter Completed) "Completed")))
+
+;; Here's how each filter is displayed.
+
+(defn viewFilter [filter isFilter filterText]
+  (if isFilter
+    (span {:class :mr-3} (text filterText))
+    (span {:class [:text-primary :mr-3]
+           ;; When you click on a filter, it will get set as the current filter.
+           :on-click (SetFilter filter)
+           :style {:cursor :pointer}}
+      (text filterText))))
+
+(defn viewTodo [editing index todo]
+  (case editing
+    (Just todoEdit)
+    (if (= todoEdit.index index)
+      (viewEditTodo index todoEdit)
+      (viewNormalTodo index todo))
+
+    Nothing
+    (viewNormalTodo index todo)))
+
+(defn viewEditTodo [index todoEdit]
+  (div {:class :card}
+    (div {:class :card-block}
+      (form {:on-submit (EditSave todoEdit.index todoEdit.text)}
+        (input {:on-input (Edit index)
+                :class :form-control
+                :value todoEdit.text})))))
+
+(defn viewNormalTodo [index todo]
+  (div {:class :card}
+    (div {:class :card-block}
+       (input {:on-click (ToggleTodo index)
+               :type :checkbox
+               :checked todo.completed
+               :class :mr-3})
+       (span {:on-double-click (Edit index todo.text)
+              :style {:text-decoration (if todo.completed
+                                         :line-through
+                                         :none)}}
+         (text todo.text))
+       (span {:on-click (RemoveTodo index)
+              :class :float-right}
+         (text "✖")))))
+
+(defn update [msg model]
+  (case msg
+    (UpdateText newText)
+    [(assoc model text: newText) Cmd.none]
+
+    AddTodo
+    (let [newTodos (str model.todos [Todo model.text False])]
+      [(assoc model text: "" todos: newTodos) (saveTodos newTodos)])
+
+    (RemoveTodo index)
+    (let [beforeTodos (List/take index model.todos)
+          afterTodos  (List/drop (+ index 1) model.todos)
+          newTodos    (str beforeTodos afterTodos)]
+      [(assoc model todos: newTodos) (saveTodos newTodos)])
+
+    (Edit index todoText)
+    [(assoc model editing: Just { index: index text: todoText}) Cmd.none]
+
+    (EditSave index todoText)
+    (let [newTodos (List/indexedMap (fn [i todo]
+                                      (if (= i index)
+                                        (assoc todo text: todoText)
+                                        todo))
+                                    model.todos)]
+      [(assoc model editing: Nothing todos: newTodos) (saveTodos newTodos)])
+
+    (ToggleTodo index)
+    (let [newTodos (List/indexedMap (fn [i todo]
+                                      (if (= i index)
+                                        (assoc todo completed: (not todo.completed))
+                                        todo))
+                                    model.todos)]
+      [(assoc model todos: newTodos) (saveTodos newTodos)])
+
+    ;; We added this clause to set the filter to its new value when
+    ;; the message value is (SetFilter Filter).
+    (SetFilter filter)
+    [(assoc model filter: filter) Cmd.none]))
+
+(defport saveTodos [(List Todo) -> (Cmd msg)])
+
+(defn subscriptions [model] Sub.none)
+
+(defn init [flags]
+  [(Model "" flags.todos Nothing All) Cmd.none])
+
+(defstruct Flags
+  (todos (List Todo)))
+
+(def main
+  (element init: init
+           view: view
+           update: update
+           subscriptions: subscriptions) :)
+
+(sig view [Model -> (Html Msg)])
+(sig filterTodos [Filter * (List Todo) -> (List Todo)])
+(sig viewFilters [Filter -> (Html Msg)])
+(sig viewFilter [Filter * Bool * String -> (Html Msg)])
+(sig viewTodo [(Maybe TodoEdit) * Int * Todo -> (Html Msg)])
+(sig viewEditTodo [Int * TodoEdit -> (Html Msg)])
+(sig viewNormalTodo [Int * Todo -> (Html Msg)])
+(sig update [Msg * Model -> Model * (Cmd Msg)])
+(sig subscriptions [Model -> (Sub Msg)])
+(sig init [Flags -> Model * (Cmd Msg)])
+(sig main (Program Flags Model Msg))

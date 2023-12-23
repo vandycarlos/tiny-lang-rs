@@ -1,0 +1,92 @@
+
+;; elm install elm-explorations/linear-algebra
+;; elm install elm-explorations/webgl
+
+(import WebGL
+        Browser
+        [Html :refer Html]
+        [Browser.Events :as E]
+        [Math.Matrix4 :as Mat4 :refer Mat4]
+        [Math.Vector3 :as Vec3 :refer [Vec3 vec3]]
+        [Html.Attributes :refer [width height style]])
+
+;;;;; MAIN
+
+(def main
+  (Browser/element
+    init: init
+    view: view
+    update: update
+    subscriptions: subscriptions))
+
+;;;;; MODEL
+
+(defalias Model Float)
+
+(defn init () [0 Cmd.none])
+
+;;;;; UPDATE
+
+(defunion Msg
+  (TimeDelta Float))
+
+(defn update [msg currentTime]
+  (case msg
+    (TimeDelta delta)
+    [(+ delta currentTime) Cmd.none]))
+
+;;;;; SUBSCRIPTIONS
+
+(defn subscriptions [_]
+  (E/onAnimationFrameDelta TimeDelta))
+
+;;;;; VIEW
+
+(defn view [t]
+  (WebGL/toHtml {:width 400 :height 400 :style {:display :block}}
+                [(WebGL/entity vertexShader fragmentShader mesh perspective: (perspective (/ t 1000)))]))
+
+(defn perspective [t]
+  (Mat4/mul (Mat4/makePerspective 45 1 0.01 100)
+            (Mat4/makeLookAt (vec3 (* 4 (cos t)) 0 (* 4 (sin t)))
+                             (vec3 0 0 0) (vec3 0 1 0))))
+
+;;;;; MESH
+
+(defstruct Vertex
+  [position Vec3]
+  [color    Vec3])
+
+(ann mesh (WebGL.Mesh Vertex))
+(def mesh
+  (WebGL/triangles [[(Vertex (vec3 0 0 0) (vec3 1 0 0))
+                     (Vertex (vec3 1 1 0) (vec3 0 1 0))
+                     (Vertex (vec3 1 -1 0) (vec3 0 0 1))]]))
+
+;; SHADERS
+
+(defstruct Uniforms
+  [perspective Mat4])
+
+(def-shader vertexShader
+  (attribute vec3 position)
+  (attribute vec3 color)
+  (uniform mat4 perspective)
+  (varying vec3 vcolor)
+  (defn main []
+    (set! gl_Position (* perspective vec4 position 1.0))
+    (set! vcolor color)))
+
+(def-shader fragmentShader
+  (precision mediump float)
+  (varying vec3 vcolor)
+  (defn main [] (set! gl_FragColor (vec4 vcolor 1.0))))
+
+
+(ann init [() -> Model (Cmd Msg)])
+(ann update [Msg Model -> Model (Cmd Msg)])
+(ann subscriptions [Model -> (Sub Msg)])
+(ann view [Model -> (Html msg)])
+(ann perspective [Float -> Mat4])
+(ann vertexShader (WebGL/Shader Vertex Uniforms (struct [vcolor Vec3])))
+(ann fragmentShader (WebGL/Shader {} Uniforms (struct [vcolor Vec3])))

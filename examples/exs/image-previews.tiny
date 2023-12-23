@@ -1,0 +1,100 @@
+
+; Image upload with a drag and drop zone. See image previews!
+
+(import
+  Task
+  Browser
+  [File :refer [File]]
+  [File.Select :as Select]
+  [Html :refer-all]
+  [Html.Attributes :refer-all]
+  [Html.Events :refer-all]
+  [Json.Decode :as D])
+
+(def main =
+  (Browser/element init: init
+                   view: view
+                   update: update
+                   subscriptions: subscriptions))
+
+(defstruct Model
+  [hover Bool]
+  [previews (List String)])
+
+(defn init [_]
+  [(Model False []) Cmd.none])
+
+(defenum Msg
+  (Pick)
+  (DragEnter)
+  (DragLeave)
+  (GotFiles File (List File))
+  (GotPreviews (List String)))
+
+(defn update [msg model]
+  (match msg
+    (Pick)
+    [model (Select/files ["image/*"] GotFiles)]
+
+    (DragEnter)
+    [(assoc model hover: True) Cmd.none]
+
+    (DragLeave)
+    [(assoc model hover: False) Cmd.none]
+
+    (GotFiles file files)
+    [(assoc model hover: False)
+     (Task/perform GotPreviews (Task/sequence (List/map File.toUrl (cons file files))))]
+
+    (GotPreviews urls)
+    [(assoc model previews: urls) Cmd.none]))
+
+(defn subscriptions [model]
+  Sub.none)
+
+(defn view [model]
+  (div {:border (if model.hover "6px dashed purple" "6px dashed #ccc")
+        :border-radius "20px"
+        :width "480px"
+        :margin "100px auto"
+        :padding "40px"
+        :display :flex
+        :flex-direction :column
+        :justify-content :center
+        :align-items :center
+        :extra [(hijackOn :dragenter (D/succeed DragEnter))
+                (hijackOn :dragover (D/succeed DragEnter))
+                (hijackOn :dragleave (D/succeed DragLeave))
+                (hijackOn :drop dropDecoder)]}
+    (button [(onClick Pick)] [(text "Upload Images")])
+    (div {:display :flex
+          :align-items :center
+          :height "60px"
+          :padding "20px"}
+      (List/map viewPreview model.previews))))
+
+(defn viewPreview [url]
+  (div {:width "60px"
+        :height "60px"
+        :background-image (strf "url('{}')" url)
+        :background-position :center
+        :background-repeat :no-repeat
+        :background-size :contain}))
+
+(def dropDecoder
+  (D/at ["dataTransfer files"] (D/oneOrMore GotFiles File.decoder)))
+
+(defn hijackOn [event decoder]
+  (preventDefaultOn event (D.map hijack decoder)))
+
+(defn hijack [msg]
+  [msg True])
+
+(sig init [() -> [Model (Cmd Msg)]])
+(sig update [Msg * Model -> [Model (Cmd Msg)]])
+(sig subscriptions [Model -> (Sub Msg)])
+(sig view [Model -> (Html Msg)])
+(sig viewPreview [String -> (Html msg)])
+(sig dropDecoder (D/Decoder Msg))
+(sig hijack [msg -> [msg Bool]])
+(sig hijackOn [String * (D.Decoder msg) -> (Attribute msg)])

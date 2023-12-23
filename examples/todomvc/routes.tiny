@@ -1,0 +1,23 @@
+
+(import [app.session :as session]
+        [secretary.core :as secretary]
+        [goog/goog.events :as events]
+        [goog/goog.history.EventType :as EventType]
+        [goog/goog.History :as History])
+
+(secretary/set-config! :prefix "#")
+
+(secretary/defroute "/" []
+  (reset! session/todos-display-type :all))
+
+(secretary/defroute "/active" []
+  (reset! session/todos-display-type :active))
+
+(secretary/defroute "/completed" []
+  (reset! session/todos-display-type :completed))
+
+(doto (History.new)
+  (events/listen EventType/NAVIGATE
+    (fn [event]
+      (secretary/dispatch! (p/token event))))
+  (m/setEnabled true))

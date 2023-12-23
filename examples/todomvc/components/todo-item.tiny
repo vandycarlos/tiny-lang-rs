@@ -1,0 +1,30 @@
+
+(import [reagent.core :as r]
+        [app.session :as session]
+        [app.actions :as actions]
+        [app.helpers :as helpers]
+        [app.components.todo-edit :as todo-edit])
+
+(defn todo-item-class [completed editing]
+  (str (when completed "completed ")
+       (when @editing "editing")))
+
+(defn todo-checkbox [id completed]
+  (d/input {:type :checkbox
+            :class :toggle
+            :checked completed
+            :on-change #(actions/toggle-todo id)}))
+
+(defn component [todo]
+  (let [editing (r/atom false)]
+    (fn [todo]
+      (d/li {:class (todo-item-class todo.completed editing)
+             :style {:display (helpers/display-item
+                                (helpers/todo-display-filter todo.completed
+                                                             @session/todos-display-type))}}
+        (d/div {:class :view}
+          (todo-checkbox todo.id todo.completed)
+          (d/label {:on-double-click #(reset! editing true)} todo.title)
+          (d/button {:class :destroy
+                     :on-click #(actions/delete-todo todo.id)}))
+        (todo-edit/component todo editing)))))

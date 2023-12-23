@@ -1,0 +1,68 @@
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def open-issues (mutable-set-of "uniqueDescr1" "uniqueDescr2" "uniqueDescr3"))
+
+(defn add-issue [unique-desc]
+  (m/add open-issues unique-desc))
+
+(defn get-status-log [is-added]
+  (if is-added
+    "registered correctly."
+    "marked as duplicate and rejected."))
+
+(defn main []
+  (def a-new-issue         "uniqueDescr4")
+  (def an-issue-already-in "uniqueDescr2")
+
+  (println "Issue {} {}" a-new-issue (get-status-log (add-issue a-new-issue)))
+  (println "Issue {} {}" an-issue-already-in (get-status-log (add-issue an-issue-already-in))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(def points-x-pass    15
+     ez-pass-accounts (mutable-map-of [1 100] [2 100] [3 100])
+     ez-pass-report   ez-pass-accounts)
+
+(defn update-points-credit [account-id]
+  (if (m/contains-key ez-pass-accounts account-id)
+    (do (println "Updating {}..." account-id)
+        (m/put ez-pass-accounts account-id
+          (str (m/get ez-pass-accounts account-id) points-x-pass)))
+    (println "Error: Trying to update a non-existing account (id: {})" account-id)))
+
+(defn accounts-report []
+  (println "EZ-Pass report:")
+  (m/for-each ez-pass-report (fn [k v] (println "ID {}: credit {}" k v))))
+
+(defn main []
+  (accounts-report)
+  (update-points-credit 1)
+  (update-points-credit 1)
+  (update-points-credit 5)
+  (accounts-report))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defstruct Person
+  [name  String]
+  [city  String]
+  [phone String])
+
+(def people [(Person name: "John"
+                     city: "Boston"
+                     phone: "+1-888-123456")
+             (Person name: "Sarah"
+                     city: "Munich"
+                     phone: "+49-777-789123")
+             (Person name: "Svyatoslav"
+                     city: "Saint-Petersburg"
+                     phone: "+7-999-456789")
+             (Person name: "Vasilisa"
+                     city: "Saint-Petersburg"
+                     phone: "+7-999-123456")])
+
+(def phone-book       (m/associate-by people (fn [] it.phone)))
+(def city-book        (m/associate-by people Person.phone Person.city))
+(def people-cities    (m/group-by people Person.city Person.name))
+(def last-person-city (m/associate-by people Person.city Person.name))

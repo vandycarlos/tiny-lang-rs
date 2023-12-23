@@ -1,0 +1,36 @@
+
+(import [lib.string :as str]
+        [lib.react.core :as r]
+        [lib.react.dom :as rdom]
+        [js/global :refer [Date setInterval]])
+(export-js [run])
+
+(defonce timer (r/atom (Date/new)))
+
+(defonce time-color (r/atom "#f34"))
+
+(defonce time-updater (setInterval #(reset! timer (Date/new)) 1000))
+
+(defn greeting [message]
+  (d/h1 message))
+
+(defn clock []
+  (let [time-str (-> @timer m/toTimeString (str/split " ") first)]
+    (d/div {:class :example-clock
+            :style {:color @time-color}}
+      time-str)))
+
+(defn color-input []
+  (d/div {:class :color-input}
+    "Time color: "
+    (d/input {:type :text
+              :value @time-color
+              :on-change #(reset! time-color (-> %1 p/target.value))})))
+
+(defn app []
+  (d/div (greeting "Hello world, it is now")
+         (clock)
+         (color-input)))
+
+(defn run []
+  (rdom/render [app] :app))

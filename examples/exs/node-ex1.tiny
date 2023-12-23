@@ -1,0 +1,13 @@
+
+(import [lib.nodejs :as node])
+
+(def fs (node/require "fs"))
+(def path (node/require "path"))
+
+(defn file-seq [dir]
+  (tree-seq (fn [f] (m/isDirectory (m/statSync fs f) ()))
+            (fn [d] (map #(m/join path d %) (m/readdirSync fs d)))
+            dir))
+
+(defn -main [& paths]
+  (dorun (map println (mapcat file-seq paths))))

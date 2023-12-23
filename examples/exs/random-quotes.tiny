@@ -1,0 +1,94 @@
+
+(import Http
+        Browser
+        [Html :refer-all]
+        [Html.Events :refer-all]
+        [Html.Attributes :refer style]
+        [Json.Decode :refer [Decoder map4 field int string]])
+
+;; MAIN
+
+(def main
+  (Browser/element init: init
+                   view: view
+                   update: update
+                   subscriptions: subscriptions))
+
+;; MODEL
+
+(defenum Model
+  (Failure)
+  (Loading)
+  (Success Quote))
+
+(defstruct Quote
+  (quote  String)
+  (source String)
+  (author String)
+  (year   Int))
+
+(defn init [_] [Loading getRandomQuote])
+
+;; UPDATE
+
+(defenum Msg
+  (MorePlease)
+  (GotQuote (Result Http/Error Quote)))
+
+(defn update [msg model]
+  (case msg
+    (MorePlease)
+    [Loading getRandomQuote]
+
+    (GotQuote result)
+    (case result
+      (Ok quote)
+      [(Success quote) Cmd.none]
+
+      (Err _)
+      [Failure Cmd.none])))
+
+;; SUBSCRIPTIONS
+
+(defn subscriptions [model] Sub.none)
+
+;; VIEW
+
+(defn view [model]
+  (d/div (h2 (text "Random Quotes"))
+         (viewQuote model)))
+
+(defn viewQuote [model]
+  (case model
+    (Failure)
+    (d/div (d/text "I could not load a random quote for some reason. ")
+           (d/button {:on-click MorePlease} (d/text "Try Again!")))
+    (Loading)
+    (d/text "Loading...")
+    (Success quote)
+    (d/div (d/button {:on-click MorePlease :style {:display :block}} (d/text "More Please!"))
+           (d/blockquote (d/text quote.quote))
+           (d/p {:style {:text-align :right}}
+             (d/text "— ")
+             (d/cite (text quote.source))
+             (d/text (strf " by {} ({})" quote.author (String/fromInt quote.year)))))))
+
+;; HTTP
+
+(defn getRandomQuote []
+  (Http/get url: "https://elm-lang.org/api/random-quotes"
+            expect: (Http/expectJson GotQuote quoteDecoder)))
+
+(defn quoteDecoder
+  (map4 Quote (field :quote string)
+              (field :source string)
+              (field :author string)
+              (field :year int)))
+
+(ann init [() -> Model (Cmd Msg)])
+(ann update [Msg Model -> Model (Cmd Msg)])
+(ann subscriptions [Model -> (Sub Msg)])
+(ann view [Model -> (Html Msg)])
+(ann viewQuote [Model -> (Html Msg)])
+(ann getRandomQuote [() -> (Cmd Msg)])
+(ann quoteDecoder [() -> (Decoder Quote)])

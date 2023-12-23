@@ -1,0 +1,12 @@
+(import [app.session :as session]
+        [app.actions :as actions]
+        [app.helpers :as helpers])
+
+(defn component []
+  (d/span (d/input {:id :toggle-all
+                    :class :toggle-all
+                    :type :checkbox
+                    :checked (helpers/todos-all-completed? @session/todos)
+                    :on-change #(actions/toggle-all-todos
+                                 (helpers/todos-all-completed? @session/todos))})
+          (d/label {:for :toggle-all} "Mark all as complete")))

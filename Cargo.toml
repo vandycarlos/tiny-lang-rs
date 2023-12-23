@@ -1,0 +1,17 @@
+[package]
+name = "tiny-lang"
+version = "0.1.0"
+
+[workspace]
+members = [ "tiny-cli", "tiny-library" ]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Vandy Carlos <vandycarlos@gmail.com>"]
+categories = ["parser-implementations"]
+description = "A Lisp like programming language"
+repository = "https://github.com/vandycarlos/tiny-lang"
+homepage = "https://github.com/vandycarlos/tiny-lang"
+documentation = "https://docs.rs/tiny-lang"

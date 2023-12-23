@@ -1,0 +1,44 @@
+
+(import [lib.react.core :as r]
+        [lib.string :as str])
+
+(def app-state
+  (r/atom [{:id 1 :first-name "Jason"  :last-name "Yates"    :age "34"}
+           {:id 2 :first-name "Chris"  :last-name "Wilson"   :age "33"}
+           {:id 3 :first-name "John"   :last-name "Lawrence" :age "32"}
+           {:id 4 :first-name "Albert" :last-name "Voxel"    :age "67"}
+           {:id 5 :first-name "Zemby"  :last-name "Alcoe"    :age "495"}]))
+
+(defn filter-content [filterstring]
+  (filter #(re-find (->> (str filterstring)
+                         (str/upper-case)
+                         (re-pattern))
+                    (str/upper-case (:first-name %1)))
+          @app-state))
+
+(defn table [filter']
+  (d/table {:class [:table :table-condensed]}
+    (d/thead
+      (d/tr (d/th "First Name")
+            (d/th "Last Name")
+            (d/th "Age")))
+    (d/tbody
+      (for [todo (filter-content filter')]
+        (d/tr {:key todo.id}
+          (d/td todo.first-name)
+          (d/td todo.last-name)
+          (d/td todo.age))))))
+
+(defn search-table []
+  (let filter-value (r/atom nil)
+    (d/div (d/input {:type      :text
+                     :value     @filter-value
+                     :on-change #(reset! filter-value (-> %1 p/target.value))})
+           (table @filter-value))))
+
+(defn home []
+  (d/div {:class :container}
+    (search-table)))
+
+(defn main []
+  (r/render [home] :app))

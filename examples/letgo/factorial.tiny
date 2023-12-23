@@ -1,0 +1,11 @@
+
+(defn fac [n]
+  (fact-h n 1))
+
+(defn fact-h [n acc]
+  (if (zero? n)
+    acc
+    (fact-h (dec n) (* acc n))))
+
+(defn main []
+  (println (fac 20)))

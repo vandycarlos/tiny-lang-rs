@@ -1,0 +1,7 @@
+(import [std.string :as str])
+(defn double (v) (* 2 v))
+{:a "a" :b "b"}
+(list 10 20 30)
+[10 20 30]
+(def v 10)
+(* 2 3)

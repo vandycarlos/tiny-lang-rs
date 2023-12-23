@@ -1,0 +1,32 @@
+
+(import [reagent.core :as reagent]
+        [app.session :as session]
+        [app.actions :as actions]
+        [app.helpers :as helpers]
+        [app.components.title :as title]
+        [app.components.todo-input :as todo-input]
+        [app.components.footer :as footer]
+        [app.components.todos-toggle :as todos-toggle]
+        [app.components.todos-list :as todos-list]
+        [app.components.todos-count :as todos-count]
+        [app.components.todos-filters :as todos-filters]
+        [app.components.todos-clear :as todos-clear])
+(export-js [main])
+
+(defn todo-app []
+  (d/div (d/section {:class :todoapp}
+           (d/header (:class :header)
+             (title/component)
+             (todo-input/component))
+           (d/div {:style {:display (helpers/display-elem (helpers/todos-any? @session/todos))}}
+             (d/section {:class :main}
+               (todos-toggle/component)
+               (todos-list/component (helpers/todos-all @session/todos)))
+             (d/footer {:class :footer}
+               (todos-count/component)
+               (todos-filters/component)
+               (todos-clear/component))))
+         (footer/component)))
+
+(defn run []
+  (reagent/render [todo-app] :app))

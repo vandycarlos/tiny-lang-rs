@@ -1,0 +1,25 @@
+(defproject todomvc "0.1.0-SNAPSHOT"
+  :dependencies [[:mvn org.clojure/clojure "1.6.0"]
+                 [:mvn org.clojure/clojurescript "0.0-3058" :scope "provided"]
+                 [:mvn reagent "0.5.0"]
+                 [:mvn secretary "1.2.2"]
+                 [:mvn alandipert/storage-atom "1.2.4"]
+	               [:npm todomvc-app-css "^2.1.0",]
+                 [:npm todomvc-common  "^1.0.1"]]
+
+  :jvm-opts ["--add-modules" "java.xml.bind"]
+
+  :min-lein-version "2.5.0"
+
+  :plugins [[lein-js-build "1.0.4"]]
+
+  :profiles {:dev {:build {:source-paths ["src/cljs"]
+                           :compiler {:output-to "js/app.js"}
+                           :type :cljsbuild}}}
+
+             :prod {:build {:source-paths ["src/cljs"]
+                            :type :cljsbuild
+                            :compiler {:output-to "js/app.js"
+                                       :optimizations :advanced
+                                       :elide-asserts true
+                                       :pretty-print false}}})

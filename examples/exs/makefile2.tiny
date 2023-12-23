@@ -1,0 +1,41 @@
+
+(defs PATH-INFO         "/fileserver.gr"
+      X-MATCHED-ROUTE   "/static/..."
+      BINDLE-SERVER-URL "http://localhost:8080/v1")
+
+(deftask run []
+  (env [:PATH_INFO :X_MATCHED_ROUTE]
+       (grain fileserver.gr)))
+
+(deftask build []
+  (grain compile fileserver.gr))
+
+(deftask test-unit []
+  (grain tests.gr))
+
+(deftask test [build])
+
+(deftask test [test-unit])
+
+(deftask test []
+  (echo "EXPECT: Loading file fileserver.gr")
+  (-> (wasmtime --dir .
+                --env PATH_INFO=$PATH_INFO
+                --env X_MATCHED_ROUTE=$X_MATCHED_ROUTE
+                fileserver.gr.wasm)
+      (ignore)))
+
+(deftask push []
+  (hippofactory -s $BINDLE_SERVER_URL "."))
+
+(deftask doc [lib/*.gr]
+  (grain doc "lib/env.gr" -o "lib/env.md")
+  (grain doc "lib/mediatype.gr" -o "lib/mediatype.md")
+  (grain doc "lib/stringutil.gr" -o "lib/stringutil.md"))
+
+(deftask fmt [*.gr "lib/*.gr"]
+  (grain format fileserver.gr --in-place)
+  (grain format tests.gr --in-place)
+  (grain format "lib/env.gr" --in-place)
+  (grain format "lib/mediatype.gr" --in-place)
+  (grain format "lib/stringutil.gr" --in-place))

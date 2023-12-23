@@ -1,0 +1,90 @@
+
+(import [db.query :as q])
+
+(with-open [conn (q/connect :host "127.0.0.1" :port 28015 :db :test)]
+  (-> (q/create-db :test) (q/run conn))
+
+  (-> (q/db :test)
+      (q/create-collection :authors)
+      (q/run conn))
+
+  (comment
+    ; This is equivalent to the previous query; db on connection
+    ; is implicitly used if no db is provided.
+    (-> (q/create-collection :authors)
+        (q/run conn)))
+
+  (def authors (-> (q/db :test) (q/collection :authors)))
+
+  ;; Create an index on the field "genre".
+  (-> authors
+      (q/create-index :genre (q/fn [row] row.genre))
+      (q/run conn))
+
+  (-> authors
+      (q/insert [{:name "E.L. James"
+                  :genre :crap
+                  :country "UK"
+                  :books ["Fifty Shades of Grey"
+                          "Fifty Shades Darker"
+                          "Fifty Shades Freed"]
+                  :tags ["serious" "adult" "spicy"]}
+                 {:name "Stephenie Meyer"
+                  :genre :crap
+                  :country "USA"
+                  :books ["Twilight"
+                          "New Moon"
+                          "Eclipse"
+                          "Breaking Dawn"]
+                  :tags ["weird" "serious"]}])
+      (q/run conn))
+
+  ;; Use the "genre" index we created to get all books with the genre of "crap".
+  (-> authors
+      (q/get-all :genre [:crap])
+      (q/filter (q/fn [row] (= "Stephenie Meyer" row.name)))
+      (q/run conn))
+
+  (-> authors
+      ;; Filter the table (one would normally use an index for that).
+      (q/filter (q/fn [author] (= "E.L. James" author.name)))
+      ;; Update the books for all authors matching the above filter by appending a new title to the array field :books.
+      (q/update (q/fn [author]
+                  {:books (-> author.books (q/append "Fifty More Gray Books"))}))
+      (q/run conn))
+
+  ;; Update all authors with a field called :number-of-books that contains the count of things in the :books field.
+  (-> authors
+      (q/update (q/fn [author]
+                  {:number-of-books (-> author.books (q/count))}))
+      (q/run conn))
+
+  ;; Create a compound index on country and genre.
+  (-> authors
+      (q/create-index :country-genre
+        (q/fn [row] [row.country row.genre]))
+      (q/run conn))
+
+  ;; Use the compound index to access all books of a given genre published by authors from a given country.
+  (-> authors
+      (q/get-all :country-genre [["UK" "crap"]])
+      (q/run conn))
+
+  ;; Create a compound multi index to access all authors in a given country with a given tag.
+  (-> authors
+      (q/create-index :country-tags
+        (q/fn [row]
+          (q/map row.tags (q/fn [tag] [row.country tag])))
+        {:multi true})
+      (q/run conn))
+
+  ;; While creating indices, it is often useful to see what actually gets generated for every row:
+  (-> authors
+      (q/map (q/fn [row]
+               (q/map row.tags (q/fn [tag] [row.country tag]))))
+      (q/run conn))
+
+  ;; Use the country/tags index to access all authors within a country that have the tag.
+  (-> authors
+      (q/get-all :country-tags [["USA" "weird"]])
+      (q/run conn)))

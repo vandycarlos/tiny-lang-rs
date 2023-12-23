@@ -1,0 +1,64 @@
+;; load the SDL module and some useful SRFIs
+(import [sdl.sdl :as sdl])
+
+;; initialize the video subsystem
+(sdl/init :video)
+
+;; directory to search for images in
+(def image-dir "/usr/share/pixmaps/")
+
+;; utility to test if a path is a directory
+(defn file? (f)
+  (let (stats (fs/stat f)
+        type (stat/type stats))
+    (eq? type :regular)))
+
+;; build a ring of image file names
+(def image-ring
+  (def dir (fs/opendir image-dir))
+  (defn d (ls)
+    (let (file (fs/readdir dir))
+      (if (eof? file)
+        (do (fs/closedir dir) ls)
+        (d (cons (str image-dir file)
+                 ls)))))
+  (apply circular-list (reverse (filter file? (d [])))))
+
+;; functions to cycle through the ring
+(defn (next-image)
+  (let (next (first image-ring))
+    (set! image-ring (rest image-ring))
+    next))
+
+(defn (prev-image)
+  (let (orig image-ring)
+    (while (not (eq? (cddr image-ring) orig))
+      (set! image-ring (rest image-ring)))
+    (let (image (first image-ring))
+      (set! image-ring (rest image-ring))
+      image)))
+
+;; display an image given a filename
+(defn (show file)
+  (and-let (image (sdl/load-image file))
+    (sdl/set-video-mode (sdl/surface-w image) (sdl/surface-h image) 24)
+    (sdl/blit-surface image)
+    (sdl/flip)))
+
+;; show the first image
+(show (next-image))
+
+;; event handler
+(let handle (e (sdl/make-event))
+  (and (sdl/wait-event e)
+       (case (sdl/event-type e)
+         :key-down
+         (case (sdl/event-keysym e)
+           :left backspace
+           :show (prev-image)
+           :right space
+           :show (next-image)
+           :escape q
+           (do (sdl/quit)
+               (quit)))))
+  (handle e))

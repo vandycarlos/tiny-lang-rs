@@ -1,0 +1,15 @@
+[package]
+name = "tiny-cli"
+version.workspace = true
+authors.workspace = true
+description.workspace = true
+documentation.workspace = true
+
+[[bin]]
+name = "tiny"
+path = "main.rs"
+
+[dependencies]
+tiny-library = { path = "../tiny-library" }
+rustyline = "13.0.0"
+anyhow = "1.0.76"

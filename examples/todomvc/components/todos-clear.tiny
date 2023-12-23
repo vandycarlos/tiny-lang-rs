@@ -1,0 +1,10 @@
+
+(import [app.session :as session]
+        [app.actions :as actions]
+        [app.helpers :as helpers])
+
+(defn component []
+  (d/button {:class :clear-completed
+             :on-click #(actions/clear-completed-todos @session/todos)
+             :style {:display (helpers/display-elem (helpers/todos-any-completed? @session/todos))}}
+    "Clear completed"))

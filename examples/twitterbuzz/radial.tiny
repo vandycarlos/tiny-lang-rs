@@ -1,0 +1,76 @@
+; Copyright (c) Rich Hickey. All rights reserved.
+; The use and distribution terms for this software are covered by the
+; Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
+; which can be found in the file epl-v10.html at the root of this distribution.
+; By using this software in any fashion, you are agreeing to be bound by
+; the terms of this license.
+; You must not remove this notice, or any other, from this software.
+
+(import [lib.set :as set]
+        [goog.math :as math])
+
+;; Returns the set of mentions for k in mentions-data.
+(defn get-mentions [mentions-data k]
+  (-> (get-in mentions-data [k :mentions])
+      keys
+      set))
+
+;; Given child-fn (a map of parent to child), and k, return the
+;; set of all k's descendants. Set includes k.
+(defn get-descendants [child-fn k]
+  (let loop [kids #S[k]
+             check #S[k]]
+    (let [[c] (seq check)]
+      (if c
+        (loop (into kids (child-fn c))
+                (into (disj check c) (remove kids (child-fn c))))
+        kids))))
+
+;; Weight of noce, given child-fn (mapping of node to set of kids).
+(defn weight [node child-fn]
+  (if-val [kids (seq (child-fn node))]
+    (reduce + (map #(weight % child-fn) kids))
+    1))
+
+;; Return a map of node to its weight, using child-fn to get the set of children for a node.
+(defn weights [nodes child-fn]
+  (reduce (fn [m n] (assoc m n (weight n child-fn)))
+          {}
+          nodes))
+
+;; Returns a map of node => :radius, :slice, :angle.
+;; 
+;; weight-fn: one arg fn of node returning weight
+;; child-fn:  one arg fn of node returning set of nodes.
+(defn layout
+  ([nodes weight-fn child-fn]
+   (layout nodes weight-fn child-fn 1 0 360 #S[]))
+  ([nodes weight-fn child-fn radius a1 a2 seen]
+   (let [slice (- a2 a1)
+         total-weight (reduce + (map #(or (weight-fn %)
+                                          (throw (str "No weight for " %))) nodes))
+         seen (into seen nodes)]
+     (let loop [m {}
+                c1 a1
+                [node & more] (seq nodes)]
+       (if node
+         (let [s (* slice (/ (weight-fn node) total-weight))
+               c2 (+ c1 s)]
+           (loop
+             (merge m {node {:radius radius :slice s :angle (/ (+ c1 c2) 2)}}
+                      (when-val [children (seq (remove seen (child-fn node)))]
+                        (layout children weight-fn child-fn (inc radius) c1 c2 seen)))
+             c2
+             more))
+         m)))))
+
+;; Convert polar coordinates (from layout) into
+;; cartesian coordinates on the unit square, assuming the
+;; square will display max-rings rings.
+(defn polar->cartesian [polar-map max-rings]
+  (reduce (fn [m [k p]]
+            (let [r (/ p.radius (+ 0.5 max-rings) 2)]
+              (assoc m k {:x (+ 0.5 (math/angleDx p.angle r))
+                          :y (+ 0.5 (math/angleDy p.angle r))})))
+          {}
+          polar-map))

@@ -1,0 +1,13 @@
+;
+; Copyright (c) 2022 Marcin Gasperowicz <xnooga@gmail.com>
+; SPDX-License-Identifier: MIT
+;
+
+;; This is a small HTTP server example demonstrating Ring-like API
+
+(defn handler [req]
+  (println (now) req.method req.uri)
+  {:status 200 :body "hello from let-go :^)"})
+
+(defn main []
+  (serve2 handler ":7070"))

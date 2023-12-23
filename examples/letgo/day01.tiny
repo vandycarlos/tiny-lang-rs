@@ -1,0 +1,12 @@
+
+(defn parse [ls]
+   (let loop [[l & r] ls sum 0 out []]
+     (cond (nil? l) out
+           (empty? l) (loop r 0 (conj out sum))
+           (loop r (+ sum (parse-int l)) out))))
+
+(def data (->> "input/day1.txt" slurp lines parse (sort >)))
+
+(defn main []
+  (println "1:" (first data))
+  (println "2:" (->> data (take 3) (apply +))))

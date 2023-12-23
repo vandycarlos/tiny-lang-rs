@@ -1,0 +1,36 @@
+; Copyright (c) Rich Hickey. All rights reserved.
+; The use and distribution terms for this software are covered by the
+; Eclipse Public License 1.0 (http://opensource.org/licenses/eclipse-1.0.php)
+; which can be found in the file epl-v10.html at the root of this distribution.
+; By using this software in any fashion, you are agreeing to be bound by
+; the terms of this license.
+; You must not remove this notice, or any other, from this software.
+
+(import [app.core :as buzz]
+        [app.dom-helpers :as dom])
+
+;; Create a leaderboard element from a user map.
+(defn leaderboard-element [user]
+  (dom/build (d/div.tweet
+               (d/img.profile-pic {:src user.image-url})
+               (d/div.tweet-details
+                 (d/div.user-name user.username)
+                 (d/div.tweet-text (dom/html (buzz/markup user.last-tweet)))
+                 (d/div (str (buzz/num-mentions user)))))))
+
+;; Given a map of users, return a sequence of users in order of the
+;; greatest to least number of mentions.
+(defn leaders [nodes]
+  (reverse (sort-by #(buzz/num-mentions (second %1)) nodes)))
+
+;; Put the top 5 mentioned users in the leaderboard.
+(defn update-leaderboard [graph]
+  (dom/remove-children :leaderboard-content)
+  (doseq [next-node (take 5 (leaders (seq graph)))]
+    (dom/append (dom/get-element :leaderboard-content)
+                (leaderboard-element (second next-node)))))
+
+;; Register event listeners.
+(defn init []
+  (buzz/register :track-clicked #(dom/remove-children :leaderboard-content))
+  (buzz/register :graph-update update-leaderboard))

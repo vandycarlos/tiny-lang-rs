@@ -1,0 +1,9 @@
+
+(def n 200000)
+
+(defn main []
+  (let [begin (now) state (atom 0)]
+    (dotimes [_ n]
+      (go (swap! state inc)))
+    (while (< @state n)
+      (println "Spawned" @state "go blocks and finished in" (m/sub (now) begin)))))

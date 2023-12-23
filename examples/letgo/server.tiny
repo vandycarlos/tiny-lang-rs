@@ -1,0 +1,11 @@
+
+(import http)
+
+; passing a handler written in let-go to Go's `http.HandleFunc`
+(defn main []
+  (http/handle "/" (fn [res req]                              ; we get Go objects via args
+                     (println (now) req.method req.url)       ; this is reading Go struct fields from `rec`
+                     (m/write-header res 200)                 ; this is calling a Go method on `res`
+                     (m/write res "hello from let-go :^)")))
+  (println "go to http://localhost:7070")
+  (http/serve ":7070" nil))

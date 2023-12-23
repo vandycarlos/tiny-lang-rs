@@ -1,0 +1,28 @@
+
+(import [reagent.core :as r]
+        [app.actions :as actions]
+        [app.helpers :as helpers])
+
+(defn on-key-down [k title default]
+  (let [key-pressed (p/which k)]
+    (condp = key-pressed
+      helpers/enter-key (actions/add-todo title default)
+      nil)))
+
+(defn component-render []
+  (let [default ""
+        title (r/atom default)]
+    (fn []
+      (d/input {:type "text"
+                :class :new-todo
+                :value @title
+                :placeholder "What needs to be done?"
+                :on-change #(reset! title (-> % p/target p/value))
+                :on-key-down #(on-key-down % title default)}))))
+
+(defn component-did-mount [x]
+  (m/focus (r/dom-node x)))
+
+(defn component []
+  (r/create-class {:render component-render
+                   :component-did-mount component-did-mount}))

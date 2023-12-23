@@ -1,0 +1,140 @@
+(import [lib.string :as str]
+        [lib.react.core :as r]
+        [lib.web.dom :as d]
+        [lib.react.dom :as rdom]
+        [js/react :as react]
+        [js/global :refer [undefined]])
+
+(export-js [run])
+
+(defonce todos (r/atom (sorted-map)))
+
+(defonce counter (r/atom 0))
+
+(defn add-todo [text]
+  (let [id (swap! counter inc)]
+    (swap! todos assoc id {:id id :title text :done false})))
+
+(defn toggle [id]
+  (swap! todos update-in [id :done] not))
+
+(defn save [id title]
+  (swap! todos assoc-in [id :title] title))
+
+(defn delete [id]
+  (swap! todos dissoc id))
+
+(defn mmap [m f a]
+  (->> m (f a) (into (empty m))))
+
+(defn complete-all [v]
+  (swap! todos mmap map #(assoc-in %1 [1 :done] v)))
+
+(defn clear-done []
+  (swap! todos mmap remove #(get-in %1 [1 :done])))
+
+(defonce init
+  (do (add-todo "Rename Cloact to Reagent")
+      (add-todo "Add undo demo")
+      (add-todo "Make all rendering async")
+      (add-todo "Allow any arguments to component functions")
+      (complete-all true)))
+
+(defn todo-input [p]
+  (let [val (r/atom p.title)]
+    (fn [v]
+      (defn stop [_]
+        (reset! val "")
+        (when p.on-stop (p.on-stop)))
+      (defn save [e]
+        (let [v (-> @val str str/trim)]
+          (when-not (empty? v)
+            (p.on-save v))
+          (stop e)))
+      (d/input {:type :text
+                :value @val
+                :ref p.input-ref
+                :id v.id
+                :class v.class
+                :placeholder v.placeholder
+                :on-blur save
+                :on-change (fn [e]
+                             (reset! val e.target.value))
+                :on-key-down (fn [e]
+                               (case e.which
+                                 13 (save e)
+                                 27 (stop e)
+                                 nil))}))))
+
+(defn todo-edit [props]
+  (let [ref (react/useRef)]
+    (react/useEffect (fn []
+                       (m/focus ref.current)
+                       undefined))
+    (todo-input (assoc props :input-ref ref))))
+
+(defn todo-stats [todos]
+  (defn props-for [name]
+    {:class (when (= name @todos.filt) :selected)
+     :on-click #(reset! todos.filt name)})
+  (d/div (d/span {:id :todo-count}
+           (strong todos.active) " " (case todos.active 1 "item" "items") " left")
+         (d/ul {:id :filters}
+           (d/li (d/a (props-for :all) "All"))
+           (d/li (d/a (props-for :active) "Active"))
+           (d/li (d/a (props-for :done) "Completed")))
+         (when (pos? todos.done)
+           (d/button {:id :clear-completed} {:on-click clear-done}
+            "Clear completed " todos.done))))
+
+(defn todo-item []
+  (let [editing (r/atom false)]
+    (fn [todo]
+      (d/li {:class [(when done :completed)
+                     (when @editing :editing)]}
+        (d/div {:class :view}
+          (d/input  {:type :checkbox
+                     :class :toggle
+                     :checked todo.done
+                     :on-change #(toggle todo.id)})
+          (d/label {:on-double-click #(reset! editing true)}
+            todo.title)
+          (d/button {:class :destroy :on-click #(delete todo.id)})
+          (when @editing
+            (todo-edit {:class :edit
+                        :title todo.title
+                        :on-save #(save todo.id %1)
+                        :on-stop #(reset! editing false)})))))))
+
+(defn app []
+  (let [filt (r/atom :all)]
+    (fn []
+      (let [items  (vals @todos)
+            done   (->> items (filter :done) count)
+            active (- (count items) done)]
+        (d/div (d/section {:id :todoapp}
+                 (d/header {:id :header}
+                   (d/h1 "Todos"
+                     (todo-input {:id :new-todo
+                                  :on-save add-todo
+                                  :placeholder "What needs to be done?"})))
+                 (when (-> items count pos?)
+                   (div (d/section {:id :main}
+                          (d/input {:id :toggle-all} {:type :checkbox
+                                                      :checked (zero? active)
+                                                      :on-change #(complete-all (pos? active))})
+                          (d/label {:for :toggle-all} "Mark all as complete")
+                          (d/ul {:id :todo-list}
+                            (for [todo (filter (case @filt
+                                                 :active (complement :done)
+                                                 :done :done
+                                                 :all identity)
+                                               items)]
+                              (todo-item {:key (:id todo)} todo))))
+                        (d/footer {:id :footer}
+                          (todo-stats {:active active :done done :filt filt}))))
+               (d/footer {:id :info}
+                 (d/p "Double-click to edit a todo"))))))))
+
+(defn run []
+  (rdom/render [app] :app))

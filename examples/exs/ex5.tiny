@@ -1,0 +1,7 @@
+(def v :a)
+(def v2 "Hello")
+(defn sum [xs]
+  (reduce + 0.1 xs))
+(println (sum [1.2 2 3.5 4 5]))
+[1 2 3]
+{:a :A :b :B :1 :10}

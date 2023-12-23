@@ -1,0 +1,65 @@
+;; Input a user name and password. Make sure the password matches.
+;;
+;; Read how it works:
+;; https://guide.elm-lang.org/architecture/forms.html
+(import Browser
+        [Html :refer-all]
+        [Html.Attributes :refer-all]
+        [Html.Events :refer onInput])
+
+;; MAIN
+
+(def main (Browser/sandbox init: init
+                           update: update
+                           view: view))
+
+;; MODEL
+
+(defstruct Model
+  (name          String)
+  (password      String)
+  (passwordAgain String))
+
+(def init (Model "" "" ""))
+
+;; UPDATE
+
+(defenum Msg
+  (Name          String)
+  (Password      String)
+  (PasswordAgain String))
+
+(defn update [msg model]
+  (match msg
+    (Name name)
+    (assoc model name: name)
+
+    (Password password)
+    (assoc model password: password)
+
+    (PasswordAgain password)
+    (assoc model passwordAgain: password)))
+
+;; VIEW
+
+(defn view [model]
+  (div (viewInput "text" "Name" model.name Name)
+       (viewInput "password" "Password" model.password Password)
+       (viewInput "password" "Re-enter Password" model.passwordAgain PasswordAgain)
+       (viewValidation model)))
+
+(defn viewInput [t p v toMsg]
+  (input {:type t :placeholder p :value v :on-input toMsg}))
+
+(defn viewValidation [model]
+  (if (= model.password model.passwordAgain)
+    (div {:style {:color :green}}
+      (text "OK"))
+    (div {:style {:color :red}}
+      (text "Passwords do not match!"))))
+
+(ann init Model)
+(ann update [(Msg Model) -> Model])
+(ann view [Model -> (Html Msg)])
+(ann viewInput [String String String (Fn String -> msg) -> (Html msg)])
+(ann viewValidation [Model -> (Html msg)])

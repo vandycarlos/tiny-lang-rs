@@ -1,0 +1,99 @@
+
+(import String
+        Json.Decode
+        [Html :refer-all]
+        [Html.Events :refer-all]
+        [Html.Attributes :refer-all])
+
+;;;;; MODEL
+
+(defstruct Model
+  (description String)
+  (completed Bool)
+  (edits (Maybe String))
+  (id Int))
+
+(defn init [desc id]
+  {description: desc
+   completed: false
+   edits: Nothing
+   id: id})
+
+;;;;; UPDATE
+
+(defenum Msg
+  (Focus String)
+  (Edit String)
+  (Cancel)
+  (Commit)
+  (Completed Bool)
+  (Delete))
+
+(defn update [msg model]
+  (match msg
+    (Focus elementId)
+    (Just (assoc model edits: (Just model.description)))
+
+    (Edit description)
+    (Just (assoc model edits: (Just description)))
+
+    (Cancel)
+    (Just (assoc model edits: Nothing))
+
+    (Commit)
+    (case model.edits
+      (Nothing)
+      (Just model)
+
+      (Just rawDescription)
+      (let [description (String/trim rawDescription)]
+        (if (String/isEmpty description)
+          Nothing
+          (Just (assoc model edits: Nothing description: description)))))
+
+    (Completed bool)
+    (Just (assoc  model completed: bool))
+
+    (Delete)
+    (Nothing)))
+
+;;;;; VIEW
+
+(defn view [model]
+  (let [className (str (if model.completed
+                         "completed "
+                         "")
+                       (case model.edits
+                         (Just _) "editing"
+                         (Nothing)  ""))
+        description (Maybe/withDefault model.description model.edits)
+        elementId (str "todo-" (toString model.id))]
+    (li {:class className}
+      (div {:class :view}
+        (input {:class :toggle
+                :type :checkbox
+                :checked model.completed
+                :on-click (Completed (not model.completed))})
+        (label {onDoubleClick: (Focus elementId)}
+          (text description))
+        (button {class: :destroy onClick: Delete}))
+      (input {:class :edit
+              :value description
+              :name :title
+              :id elementId
+              :on-input Edit
+              :on-blur Commit
+              :on-finish [Commit Cancel]}))))
+
+(defn onFinish [enterMessage escapeMessage]
+  (defn select [key]
+    (case key
+      13 enterMessage
+      escapeMessage)) ;; Not a 'finish' key, such as ENTER or ESCAPE
+  (on :keydown (Json.Decode/map select keyCode)))
+
+
+(ann init [String Int -> Model])
+(ann update [Msg Model -> (Maybe Model)])
+(ann view [Model -> (Html Msg)])
+(ann onFinish [msg msg -> (Attribute msg)])

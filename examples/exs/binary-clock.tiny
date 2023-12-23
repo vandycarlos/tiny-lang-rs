@@ -1,0 +1,52 @@
+
+(import [reagent.core :as r]
+				[js/global :refer [Date setTimeout]])
+
+(defn cell [n bit]
+  (d/div {:class (merge {:class :clock-cell}
+                        (if (bit-test n bit)
+                          :light
+                          :dark))}))
+
+(defn column [n]
+  (d/div {:class :clock-col}
+   (cell n 3)
+   (cell n 2)
+   (cell n 1)
+   (cell n 0)
+   (d/div {:class :clock-cell} n)))
+
+(defn column-pair [n]
+  (d/div {:class :clock-pair}
+   (column (quot n 10))
+   (column (mod n 10))))
+
+(defn legend [& items]
+  (into (d/div {:class [:clock-col :clock-legend]})
+        (map (vector (d/div {:class :clock-cell}) %*)
+             items)))
+
+(defn clock [date show-100s toggle-100s]
+  (d/div.clock-main {:on-click toggle-100s
+                     :class (when show-100s :wide)}
+   (legend 8 4 2 1)
+   (column-pair (m/getHours date))
+   (column-pair (m/getMinutes date))
+   (column-pair (m/getSeconds date))
+   (when show-100s
+     (column-pair (-> (m/getMilliseconds date)
+                      (quot 10))))))
+
+(def clock-state (r/atom {:time (Date/new)
+                          :show-100s false}))
+
+(defn update-time []
+  (swap! clock-state assoc :time (Date/new)))
+
+(defn main []
+  (let [state @clock-state]
+    (if state.show-100s
+      (r/next-tick update-time)
+      (setTimeout update-time 1000))
+    [clock state.time state.show-100s
+     #(swap! clock-state update-in [:show-100s] not)]))

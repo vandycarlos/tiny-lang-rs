@@ -1,0 +1,628 @@
+
+(import [cljs.core.async :refer [chan put! <!]]
+        [clojure.string :refer [join replace trimr]]
+        [goog.events :as events]
+        [goog.functions :refer debounce]
+        [cljsjs.rangy-core]
+        [cljsjs.rangy-textrange]
+        [mistakes-were-made.core :as mwm :refer atom?]
+        [html-soup.core :as hs]
+        [cross-parinfer.core :as cp]
+        [paren-soup.console :as console]
+        [paren-soup.instarepl :as ir]
+        [paren-soup.dom :as dom]
+        [clojure.spec.alpha :as s :refer fdef]
+        [goog.labs.userAgent.browser :as browser]
+        [cljs.core.async.macros :refer go]
+        [js/global :refer [Element Object Error window document rangy]])
+
+(export [undo redo can-undo ca-redo append-text eval debounce-function
+         init focused-text selected-text init-all])
+
+(def channel? #(is? % cljs.core.async.impl.channels.ManyToManyChannel))
+
+(def transient-map? #(or (is? % cljs.core/TransientArrayMap)
+                         (is? % cljs.core/TransientHashMap)))
+(def elem? #(is? % Element))
+
+(def obj? #(is? % Object))
+
+;;; Shows a popup with an error message.
+(defn show-error-message! [parent-elem event]
+  (let [elem event.target
+        x event.clientX
+        y event.clientY
+        popup (m/createElement document "div")]
+    (set! popup.textContent elem.dataset.message)
+    (set! popup.style.top (str y "px"))
+    (set! popup.style.left (str x "px"))
+    (set! popup.className "error-text")
+    (m/appendChild parent-elem popup)))
+
+;;; Hides all error popups.
+(defn hide-error-messages! [parent-elem]
+  (doseq [elem (-> parent-elem (m/querySelectorAll ".error-text") array-seq)]
+    (m/removeChild parent-elem elem)))
+
+(def rainbow-count 5)
+
+;;; Returns a map of elements and class names.
+(defn rainbow-delimiters
+  ([parent level]
+   (persistent! (rainbow-delimiters parent level (transient {}))))
+  ([parent level m]
+   (reduce
+     (fn [m elem]
+       (let [classes elem.classList]
+         (cond
+           (m/contains classes :delimiter)
+           (assoc! m elem (str "rainbow-" (mod level rainbow-count)))
+           (m/contains classes :collection)
+           (rainbow-delimiters elem (inc level) m)
+           :else
+           m)))
+     m
+     (-> parent.children array-seq))))
+
+;;; Adds line numbers to the numbers.
+(defn line-numbers [line-count]
+  (join (for [i (range line-count)]
+          (str "<div>" (inc i) "</div>"))))
+
+;;; Refreshes the line numbers.
+(defn refresh-numbers! [numbers line-count]
+  (set! numbers.innerHTML (line-numbers line-count)))
+
+;;; Refreshes the InstaREPL.
+(defn refresh-instarepl! [instarepl content compiler-fn limit]
+  (let [elems (ir/get-collections content)
+        locations (ir/elems->locations elems instarepl.offsetTop)
+        forms (->> elems
+                   (map ir/collection->content)
+                   (map #(replace % \u00a0 " ")))]
+    (compiler-fn forms
+      (fn [results]
+        (when instarepl.parentElement
+          (set! instarepl.innerHTML (ir/results->html results locations limit)))))))
+
+(defn refresh-cursor-position! [content {&keys cropped-state :as state}]
+  (if (some->> cropped-state :element (m/contains content))
+    (some-> cropped-state :element (dom/set-cursor-position! (:cursor-position cropped-state)))
+    (if (and (:selection-change? state) (:original-cursor-position state))
+      (dom/set-cursor-position! content (:original-cursor-position state))
+      (dom/set-cursor-position! content (:cursor-position state)))))
+
+(defn refresh-errors-and-delimiters! [content events-chan]
+  ; set up errors
+  (hide-error-messages! content.parentElement)
+  (doseq [elem (-> content (m/querySelectorAll ".error") array-seq)]
+    (let [show-error-icon! (fn [elem] (set! elem.style.display :inline-block))
+          show-error-icon! (debounce show-error-icon! 1000)]
+      (show-error-icon! elem))
+    (events/listen elem :mouseenter #(put! events-chan %))
+    (events/listen elem :mouseleave #(put! events-chan %)))
+  ; add rainbow delimiters
+  (doseq [[elem class-name] (rainbow-delimiters content -1)]
+    (m/add elem.classList class-name)))
+
+;;; Replaces a single node in the content, and siblings if necessary.
+(defn refresh-content-element! [state]
+  (let [parent element.parentElement
+        ; find the last element to refresh
+        last-elem parent.lastChild
+        last-error (let loop [current-elem last-elem]
+                     (cond
+                       (dom/error-node? current-elem)
+                       current-elem
+                       (or (nil? current-elem)
+                           (= state.element current-elem))
+                       nil
+                       (loop current-elem.previousSibling)))
+        last-elem-to-refresh (when last-error
+                               (let loop [current-elem last-error]
+                                 (if-val [sibling current-elem.nextSibling]
+                                   (if (dom/coll-node? sibling)
+                                     current-elem
+                                     (loop sibling))
+                                   current-elem)))
+        ; find all elements that should be refreshed
+        old-elems (let loop [elems [state.element]
+                             current-elem state.element]
+                    (cond
+                      (= last-elem-to-refresh current-elem)
+                      elems
+                      (or (some? last-elem-to-refresh)
+                          (dom/text-node? current-elem))
+                      (if-val [sibling current-elem.nextSibling]
+                        (loop (conj elems sibling) sibling)
+                        elems)
+                      elems))
+        ; add old elems' text to the string
+        _ (set! state.element.textContent state.text)
+        text (join (map #(m/ % :textContent) old-elems))
+        ; create temporary element
+        temp-elem (m/createElement document :span)
+        _ (set! temp-elem.innerHTML (hs/code->html state.text))
+        ; collect elements
+        new-elems (doall
+                    (for [i (range (-> temp-elem .childNodes.length))]
+                      (-> temp-elem :childNodes (m/item i))))]
+    ; insert the new nodes
+    (doseq [new-elem new-elems]
+      (m/insertBefore parent new-elem state.element))
+    ; remove the old nodes
+    (doseq [old-elem old-elems]
+      (m/removeChild parent old-elem))
+    (assoc state :element (first new-elems))))
+
+(defn refresh-content! [content state clj?]
+  (if-not clj?
+    (do (set! content.innerHTML (hs/escape-html-str (:text state)))
+        state)
+    (if-val [crop (some-> state :cropped-state refresh-content-element!)]
+      ; if there were changes outside the node, we need to run it on the whole document instead
+      (if (not= (:text state) content.textContent)
+        (refresh-content! content (dissoc state :cropped-state) clj?)
+        (assoc state :cropped-state crop))
+      (do (set! content.innerHTML (hs/code->html (:text state)))
+          (dissoc state :cropped-state)))))
+
+(defn refresh-console-content! [content state console-start-num clj?]
+  (set! content.innerHTML
+    (if clj?
+      (let [pre-text (subs (:text state) 0 console-start-num)
+            post-text (subs (:text state) console-start-num)]
+        (str (hs/escape-html-str pre-text) (hs/code->html post-text)))
+      (hs/escape-html-str (:text state))))
+  state)
+
+(defn add-parinfer-after-console-start [state console-start-num]
+  (let [pre-text (subs (:text state) 0 console-start-num)
+        post-text (subs (:text state) console-start-num)
+        cleared-text (str (replace pre-text #rx"[^\r^\n]" " ") post-text)
+        temp-state (assoc state :text cleared-text)
+        temp-state (cp:add-parinfer :both temp-state)
+        new-text (str pre-text (subs (:text temp-state) console-start-num))]
+    (assoc state :text new-text)))
+
+(defn add-parinfer [state console-start-num fix-indent?]
+  (let [cropped-state (:cropped-state state)
+        state (cond-> state
+                      fix-indent?
+                      (assoc :indent-type :normal
+                             :cursor-position [0 0]))
+        indent-type (:indent-type state)
+        state (cond
+                (pos? console-start-num)
+                (add-parinfer-after-console-start state console-start-num)
+                indent-type
+                (cp:add-indent state)
+                &else
+                (cp:add-parinfer :paren state))]
+    (if (and cropped-state indent-type)
+      (assoc state :cropped-state
+        (merge cropped-state (cp:add-indent (assoc cropped-state :indent-type indent-type))))
+      state)))
+
+(defn add-newline [state]
+  (if-not (= \newline (last text))
+    (assoc state :text (str state.text \newline))
+    state))
+
+;;; Returns the editor's state. If full-selection? is true, it will try to save
+;;; the entire selection rather than just the cursor position.
+(defn init-state [content crop? full-selection?]
+  (let [selection (m/getSelection rangy)
+        anchor selection.anchorNode
+        focus  selection.focusNode
+        parent (when (and anchor focus)
+                 (dom/common-ancestor anchor focus))
+        state {:cursor-position (-> content (dom/get-selection full-selection?) :cursor-position)
+               :text content.textContent}]
+    (if-val [cropped-selection (some-> parent (dom/get-selection false))]
+      (if crop?
+        (assoc state :cropped-state
+          (assoc cropped-selection :text parent.textContent))
+        state)
+      state)))
+
+(defn update-edit-history! [*edit-history state]
+  (try
+    (mwm/update-edit-history! *edit-history
+      (if (:selection-change? state)
+        state
+        (dissoc state :cropped-state)))
+    state
+    (catch Error _ (mwm/get-current-state *edit-history))))
+
+(defn update-highlight! [content *last-elem]
+  (when-val [elem @*last-elem]
+    (set! elem.style.backgroundColor nil)
+    (reset! *last-elem nil))
+  (when-val [elem (dom/get-focused-form)]
+    (when-val [color (m/getPropertyValue (m/getComputedStyle window elem.firstChild) "color")]
+      (let [new-color (-> color (replace #rx"rgb\\(" "") (replace #rx"\\)" ""))]
+        (set! elem.style.backgroundColor (str "rgba(" new-color ", 0.1)"))
+        (reset! *last-elem elem)))))
+
+(defn key-code [event]
+  (let [code event.keyCode]
+    (if (pos? code) code event.which)))
+
+;;; Returns true if the supplied key event involves the key(s) described by key-name.
+(defn key-name? [event key-name]
+  (let [code (key-code event)]
+    (case key-name
+      :undo-or-redo
+      (and (or event.metaKey event.ctrlKey)
+           (= code 90))
+      :tab
+      (= code 9)
+      :enter
+      (= code 13)
+      :arrows
+      (contains? #{37 38 39 40} code)
+      :up-arrow
+      (= code 38)
+      :down-arrow
+      (= code 40)
+      :general
+      (not (or (contains? #S{0      ; invalid
+                             16     ; shift
+                             17     ; ctrl
+                             18     ; alt
+                             91 93} ; meta
+                 code)
+               event.ctrlKey
+               event.metaKey))
+      false)))
+
+(deftrait Editor
+  (defn undo! [this])
+  (defn redo! [this])
+  (defn can-undo? [this])
+  (defn can-redo? [this])
+  (defn update-cursor-position! [this position])
+  (defn reset-edit-history! [this start])
+  (defn append-text! [this text])
+  (defn enter! [this])
+  (defn up! [this alt?])
+  (defn down! [this alt?])
+  (defn tab! [this])
+  (defn refresh! [this state])
+  (defn edit-and-refresh! [this state])
+  (defn initialize! [this])
+  (defn refresh-after-key-event! [this event])
+  (defn refresh-after-cut-paste! [this])
+  (defn eval! [this form callback]))
+
+(defn create-editor [ps content events-chan
+                     {:name opts
+                     	:keys [history-limit append-limit
+                             compiler-fn console-callback
+                             disable-clj? edit-history focus?
+                             fix-indent-on-init?]
+                      :or {history-limit 100
+                           append-limit 5000
+                           focus? false}}]
+  (let [clj? (not disable-clj?)
+        editor? (not console-callback)
+        compiler-fn (or compiler-fn (ir/create-compiler-fn opts))
+        *edit-history (doto (or edit-history (mwm/create-edit-history))
+                        (swap! assoc :limit history-limit))
+        refresh-instarepl-with-delay! (debounce refresh-instarepl! 300)
+        *console-history (console/create-console-history)
+        *last-highlight-elem (atom nil)
+        *allow-tab? (atom false)
+        *first-refresh? (atom true)]
+    ; in console mode, don't allow text before console start to be edited
+    (when-not editor?
+      (set-validator! *edit-history
+        (fn [{&keys [current-state states]}]
+          (if-val [state (get states current-state)]
+            (-> state :cursor-position first (>= (console/get-console-start *console-history)))
+            true))))
+    ; reify the protocol
+    (reify Editor
+      (undo! [this]
+        (some->> *edit-history mwm/undo! (refresh! this))
+        (dom/scroll-to-nearest-elem))
+      (redo! [this]
+        (some->> *edit-history mwm/redo! (refresh! this))
+        (dom/scroll-to-nearest-elem))
+      (can-undo? [this]
+        (mwm/can-undo? *edit-history))
+      (can-redo? [this]
+        (mwm/can-redo? *edit-history))
+      (update-cursor-position! [this position]
+        (try
+          (mwm/update-cursor-position! *edit-history position)
+          (catch [_ Error]
+            (when (apply = position)
+              (let [start (console/get-console-start *console-history)]
+                (dom/set-cursor-position! content [start start])
+                (mwm/update-cursor-position! *edit-history [start start])))))
+        (update-highlight! content *last-highlight-elem))
+      (reset-edit-history! [this start]
+        (console/update-console-start! *console-history start)
+        (dom/set-cursor-position! content [start start])
+        (let [*new-edit-history (mwm/create-edit-history)
+              state {:cursor-position [start start]
+                     :text content.textContent}]
+          (update-edit-history! *new-edit-history state)
+          (reset! *edit-history @*new-edit-history)))
+      (append-text! [this text]
+        (let [node (m/createTextNode document text)
+              _ (m/appendChild content node)
+              all-text content.textContent
+              char-count (max 0 (- (count all-text) append-limit))
+              new-all-text (subs all-text char-count)
+              ; if text ends with a newline, it will be ignored,
+              ; so we need to account for that
+              ; see: https://stackoverflow.com/q/43492826
+              char-count (if (m/endsWith new-all-text "\n")
+                           (dec (count new-all-text))
+                           (count new-all-text))]
+          (when (not= all-text new-all-text)
+            (set! content.textContent new-all-text))
+          (reset-edit-history! this char-count)))
+      (enter! [this]
+        (if editor?
+          (m/execCommand document :insertHTML false "\n")
+          (let [text (trimr content.textContent)
+                post-text (subs text (console/get-console-start *console-history))]
+            (reset-edit-history! this (count text))
+            (console/update-console-history! *console-history post-text)
+            (console-callback post-text))))
+      (up! [this alt?]
+        (if alt?
+          (when-val [elem (dom/get-focused-form)]
+            (when-val [state (mwm/get-current-state *edit-history)]
+              (when-val [; if elem was already selected, try selecting parent
+                         elem (if (and (:selection-change? state)
+                                       (= elem (some-> state :cropped-state :element)))
+                                (dom/get-parent elem :collection)
+                                elem)]
+                (let [text elem.textContent
+                      pos [0 (count text)]]
+                  (dom/set-cursor-position! elem pos)
+                  (update-edit-history! *edit-history
+                    (assoc state
+                      :selection-change? true
+                      :cropped-state {:cursor-position pos
+                                      :text text
+                                      :element elem}))
+                  (update-highlight! content *last-highlight-elem)))))
+          (when-not editor?
+            (let [text content.textContent
+                  start (console/get-console-start *console-history)
+                  pre-text (subs text 0 (console/get-console-start *console-history))
+                  line (or (console/up! *console-history) "")
+                  state {:cursor-position [start start]
+                         :text (str pre-text line \newline)}]
+              (->> state
+                   (update-edit-history! *edit-history)
+                   (refresh! this))))))
+      (down! [this alt?]
+        (if alt?
+          (when (:selection-change? (mwm/get-current-state *edit-history))
+            (undo! this))
+          (when-not editor?
+            (let [text content.textContent
+                  start (console/get-console-start *console-history)
+                  pre-text (subs text 0 start)
+                  line (or (console/down! *console-history) "")
+                  state {:cursor-position [start start]
+                         :text (str pre-text line \newline)}]
+              (->> state
+                   (update-edit-history! *edit-history)
+                   (refresh! this))))))
+      (tab! [this]
+        ; on Windows, alt+tab causes the browser to receive the tab's keyup event
+        ; this caused the code to be tabbed after using alt+tab
+        ; this boolean atom will be set to true only on keydown in order to prevent this issue
+        (when editor?
+          (reset! *allow-tab? true)))
+      (refresh! [this state]
+        (let [state (cond
+                      (:selection-change? state) state
+                      editor? (refresh-content! content state clj?)
+                      (refresh-console-content! content state
+                        (console/get-console-start *console-history)
+                        clj?))]
+          (when (or focus? (not @*first-refresh?))
+            (refresh-cursor-position! content state))
+          (when clj?
+            (refresh-errors-and-delimiters! content events-chan))
+          (when editor?
+            (some-> (m/querySelector ps ".numbers")
+                    (refresh-numbers! (count (re-seq #"\n" (:text state)))))
+            (when clj?
+              (when-val [elem (m/querySelector ps ".instarepl")]
+                (when-not (m/ elem :style :display (= "none"))
+                  (refresh-instarepl-with-delay! elem content compiler-fn append-limit)))))
+          (update-highlight! content *last-highlight-elem)))
+      (edit-and-refresh! [this state]
+        (as-> state $
+              (add-newline $)
+              (if clj?
+                (add-parinfer $
+                              (console/get-console-start *console-history)
+                              (if fix-indent-on-init?
+                                @*first-refresh?
+                                false))
+                $)
+              (update-edit-history! *edit-history $)
+              (refresh! this $)))
+      (initialize! [this]
+        (when editor?
+          (->> (init-state content false false)
+               (edit-and-refresh! this)))
+        (reset! *first-refresh? false))
+      (refresh-after-key-event! [this event]
+        (let [tab? (key-name? event :tab)
+              state (init-state content editor? tab?)]
+          (when-not (and tab? (not @*allow-tab?))
+            (edit-and-refresh! this
+              (case (key-code event)
+                13 (assoc state :indent-type :return)
+                9 (assoc state :indent-type (if event.shiftKey :back :forward))
+                (assoc state :indent-type :normal))))
+          (when tab?
+            (reset! *allow-tab? false))))
+      (refresh-after-cut-paste! [this]
+        (edit-and-refresh! this (assoc (init-state content false false) :indent-type :normal)))
+      (eval! [this form callback]
+        (compiler-fn [form] #(callback (first %)))))))
+
+(defn prevent-default? [event opts]
+  (boolean (or (key-name? event :undo-or-redo)
+               (key-name? event :tab)
+               (key-name? event :enter)
+               (and (or (:console-callback opts)
+                        event.altKey)
+                    (or (key-name? event :up-arrow)
+                        (key-name? event :down-arrow))))))
+
+(defn add-event-listeners! [content events-chan opts]
+  (doto content
+    (events/removeAll)
+    (events/listen :keydown (fn [e]
+                               (when (prevent-default? e opts)
+                                 (m/preventDefault e))
+                               (put! events-chan e)))
+    (events/listen :keyup #(put! events-chan %))
+    (events/listen :cut #(put! events-chan %))
+    (events/listen :paste #(put! events-chan %))
+    (events/listen :mouseup #(put! events-chan %))))
+
+(defn init [ps opts]
+  (m/init rangy)
+  (let [opts (js->clj opts :keywordize-keys true)
+        content (m/querySelector ps ".content")
+        events-chan (chan)
+        editor (create-editor ps content events-chan opts)]
+    (set! ps.spellcheck false)
+    (when-not content
+      (throw (Error. "Can't find a div with class 'content'")))
+    (initialize! editor)
+    ; set up event listeners
+    (add-event-listeners! content events-chan opts)
+    ; run event loop
+    (go (while true
+          (let [event (<! events-chan)]
+            (when-not (some-> opts :before-change-callback (#(% event)))
+              (case event.type
+                :keydown
+                (cond (and (key-name? event :undo-or-redo)
+                           (-> opts :disable-undo-redo? not))
+                      (if event.shiftKey (redo! editor) (undo! editor))
+                      (key-name? event :enter)
+                      (enter! editor)
+                      (key-name? event :up-arrow)
+                      (up! editor event.altKey)
+                      (key-name? event :down-arrow)
+                      (down! editor event.altKey)
+                      (key-name? event :tab)
+                      (tab! editor))
+                :keyup
+                (cond (key-name? event :arrows)
+                      (update-cursor-position! editor
+                        (dom/get-cursor-position content false))
+                      (key-name? event :general)
+                      (refresh-after-key-event! editor event))
+                :cut
+                (refresh-after-cut-paste! editor)
+                :paste
+                (refresh-after-cut-paste! editor)
+                :mouseup
+                (update-cursor-position! editor
+                  (dom/get-cursor-position content (some? (:console-callback opts))))
+                :mouseenter
+                (show-error-message! ps event)
+                :mouseleave
+                (hide-error-messages! ps)
+                nil)
+              (some-> opts :change-callback (#(% event)))))))
+    ; return editor
+    editor))
+
+(defn init-all [& [opts]]
+  (doseq [ps (-> document (m/querySelectorAll ".paren-soup") array-seq)]
+    (init ps (or opts #js{}))))
+
+(defn undo [editor] (undo! editor))
+
+(defn redo [editor] (redo! editor))
+
+(defn can-undo [editor] (can-undo? editor))
+
+(defn can-redo [editor] (can-redo? editor))
+
+(defn append-text [editor text] (append-text! editor text))
+
+(defn eval [editor form callback] (eval! editor form callback))
+
+(defn debounce-function [f millis] (debounce f millis))
+
+(defn focused-text [] (some-> (dom/get-focused-form) :textContent))
+
+(defn selected-text []
+  (let [s (-> window .getSelection .toString)]
+    (when-not (empty? s) s)))
+
+(ann show-error-message! :args (s/cat :parent-elem elem? :event obj?))
+(ann hide-error-messages! :args (s/cat :parent-elem elem?))
+(ann rainbow-delimiters
+  :args (s/alt 2 (s/cat :parent elem? :level number?)
+               3 (s/cat :parent elem? :level number? :m transient-map?))
+  :ret (s/or :two-args map? :three-args transient-map?))
+(ann line-numbers :args (s/cat :line-count number?) :ret string?)
+(ann refresh-numbers! :args (s/cat :numbers elem? :line-count number?))
+(ann refresh-instarepl!
+  :args (s/cat :instarepl elem? :content elem? :compiler-fn fn? :limit number?))
+(ann refresh-cursor-position!
+  :args (s/cat :content elem? :state map?))
+(ann refresh-errors-and-delimiters!
+  :args (s/cat :content elem? :events-chan channel?))
+(ann refresh-content-element!
+  :args (s/cat :state map?)
+  :ret map?)
+(ann refresh-content!
+  :args (s/cat :content elem? :state map? :clj? boolean?)
+  :ret map?)
+(ann refresh-console-content!
+  :args (s/cat :content elem? :state map? :console-start-num number? :clj? boolean?)
+  :ret map?)
+(ann add-parinfer-after-console-start
+  :args (s/cat :state map? :console-start-num number?)
+  :ret map?)
+(ann add-parinfer
+  :args (s/cat :state map? :console-start-num number? :fix-indent? boolean?)
+  :ret map?)
+(ann add-newline
+  :args (s/cat :state map?)
+  :ret map?)
+(ann init-state
+  :args (s/cat :content elem? :crop? boolean? :full-selection? boolean?)
+  :ret map?)
+(ann update-edit-history!
+  :args (s/cat :*edit-history atom? :state map?)
+  :ret map?)
+(ann update-highlight!
+  :args (s/cat :content elem? :last-elem atom?))
+(ann key-code
+  :args (s/cat :event obj?)
+  :ret integer?)
+(ann key-name?
+  :args (s/cat :event obj? :key-name keyword?)
+  :ret boolean?)
+(ann create-editor
+  :args (s/cat :paren-soup elem? :content elem? :events-chan channel? :opts map?)
+  :ret #(satisfies? Editor %))
+(ann prevent-default?
+  :args (s/cat :event obj? :opts map?)
+  :ret boolean?)
+(ann add-event-listeners!
+  :args (s/cat :content elem? :events-chan channel? :opts map?))
+(ann init :args (s/cat :paren-soup elem? :opts obj?))

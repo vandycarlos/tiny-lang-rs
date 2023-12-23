@@ -1,0 +1,3 @@
+(defn sum [xs]
+  (reduce + 0 xs))
+  (println (sum [1 5 1/2 3.3 4/7 5.2]))

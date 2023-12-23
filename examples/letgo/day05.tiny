@@ -1,0 +1,25 @@
+
+(def data (->> "input/day5.txt" slurp lines (split-with (complement empty?))))
+
+(def stacks (->> data first butlast
+                 (map #(str-replace %1 #rx"( |\\[)([A-Z ])(\\]| ) ?" "$2"))
+                 (apply mapv list)
+                 (mapv #(drop-while #[c/space] %1))))
+
+(def instructions (->> data second rest
+                       (map #(str-replace %1 #rx"\\w+ (\\d+)" "$1"))
+                       (map (comp #(mapv parse-long %1) #(split %1 " ")))))
+
+(defn solve [pickup]
+  (->> instructions
+       (reduce (fn [a [n f t]]
+                 (let [f (dec f) t (dec t)]
+                   (-> a (update t into (pickup (take n (a f))))
+                         (update f #(drop n %1)))))
+               stacks)
+       (map first)
+       (apply str)))
+
+(defn main []
+  (println "1:" (solve identity))
+  (println "2:" (solve reverse)))
