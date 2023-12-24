@@ -14,10 +14,10 @@
   (id Int))
 
 (defn init [desc id]
-  {description: desc
-   completed: false
-   edits: Nothing
-   id: id})
+  {:description desc
+   :completed false
+   :edits Nothing
+   :id id})
 
 ;;;;; UPDATE
 
