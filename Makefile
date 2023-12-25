@@ -1,16 +1,13 @@
+
 FILES=$(shell find examples/ -name "*.tiny" -print)
 
-all:
-	make format
-	make run
-	make check
-	make test
+all: run format check test
 
 build:
 	cargo build
 
 run:
-	@cargo run -p tiny-cli -- $(FILES)
+	@cargo run --quiet -p tiny-cli -- $(FILES)
 
 run-clip:
 	wl-paste | DUMP=1 cargo run -p tiny-cli
@@ -20,13 +17,14 @@ inter:
 	DUMP=1 cargo run -p tiny-cli
 
 test:
-	cargo test --all
+	cargo test --workspace
 
 format:
-	cargo fmt
+	cargo fmt --all --check
 
 check:
-	cargo clippy --workspace
+	cargo clippy --workspace -- -D warnings
+	cargo check --all
 
 clean:
 	cargo clean
