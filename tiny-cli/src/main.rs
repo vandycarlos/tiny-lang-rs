@@ -8,14 +8,14 @@ use tiny_library::reader::Reader;
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() > 1 {
-        run_files(&args);
+        process_files(&args);
     } else {
         run_stdin();
         // inter();
     }
 }
 
-fn run_files(args: &Vec<String>) {
+fn process_files(args: &Vec<String>) {
     for file in args {
         let content = std::fs::read_to_string(&file).unwrap();
         process(&file, &content, true);
