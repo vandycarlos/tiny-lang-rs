@@ -7,7 +7,7 @@ documentation.workspace = true
 
 [[bin]]
 name = "tiny"
-path = "main.rs"
+path = "src/main.rs"
 
 [dependencies]
 tiny-library = { path = "../tiny-library" }

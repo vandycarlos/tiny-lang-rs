@@ -5,8 +5,5 @@ authors.workspace = true
 description.workspace = true
 documentation.workspace = true
 
-[lib]
-path = "lib.rs"
-
 [dependencies]
 anyhow = "1.0.76"
