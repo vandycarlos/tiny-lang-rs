@@ -1,4 +1,4 @@
-use crate::value::{self, Value};
+use crate::value::{Ratio, Value};
 use std::str::CharIndices;
 
 pub struct Reader<'a> {
@@ -267,11 +267,11 @@ fn is_symbol_tail(ch: char) -> bool {
         })
 }
 
-fn parse_ratio(s: &str) -> Result<value::Ratio, String> {
+fn parse_ratio(s: &str) -> Result<Ratio, String> {
     let mut split = s.splitn(2, '/');
     match (split.next(), split.next(), split.next()) {
         (Some(numer), Some(denom), None) => match (numer.parse::<i64>(), denom.parse::<i64>()) {
-            (Ok(n), Ok(d)) => Ok(value::Ratio::new(n, d)),
+            (Ok(n), Ok(d)) => Ok(Ratio::new(n, d)),
             (_, _) => Err("invalid rational".into()),
         },
         _ => Err("invalid rational".into()),
