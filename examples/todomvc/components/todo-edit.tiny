@@ -16,7 +16,7 @@
         edit-title (r/atom default)]
     (fn []
       (d/input {:type :text
-      				  :class :edit
+      				      :class :edit
                 :style {:display (helpers/display-elem @editing)}
                 :value @edit-title
                 :on-change #(reset! edit-title (-> % p/target p/value))

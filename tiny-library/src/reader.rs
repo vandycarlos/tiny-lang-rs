@@ -9,14 +9,6 @@ pub struct Reader<'a> {
     chars: CharIndices<'a>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ReadError {
-    pub name: String,
-    pub start: usize,
-    pub end: usize,
-    pub message: String,
-}
-
 impl<'a> Reader<'a> {
     pub fn new(name: &'a str, content: &'a str) -> Reader<'a> {
         Reader {
@@ -228,6 +220,14 @@ impl<'a> Reader<'a> {
             }
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReadError {
+    pub name: String,
+    pub start: usize,
+    pub end: usize,
+    pub message: String,
 }
 
 fn is_symbol_head(ch: char) -> bool {
