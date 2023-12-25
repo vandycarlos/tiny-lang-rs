@@ -17,8 +17,8 @@ fn main() {
 
 fn process_files(args: &Vec<String>) {
     for file in args {
-        let content = std::fs::read_to_string(&file).unwrap();
-        process(&file, &content, true);
+        let content = std::fs::read_to_string(file).unwrap();
+        process(file, &content, true);
     }
 }
 
@@ -59,10 +59,7 @@ fn process(name: &str, content: &str, verbose: bool) {
     if verbose {
         eprintln!("Compiling {}", reader.name);
     }
-    let dump = match std::env::var("DUMP") {
-        Ok(val) if val == "1" => true,
-        _ => false,
-    };
+    let dump = matches!(std::env::var("DUMP"), Ok(val) if val == "1");
     loop {
         match reader.read() {
             Some(Ok(form)) => {

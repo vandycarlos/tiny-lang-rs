@@ -20,7 +20,6 @@ impl<'a> Reader<'a> {
 
     pub fn read(&mut self) -> Option<Result<Value, ReadError>> {
         self.skip_whitespace();
-
         self.chars.clone().next().map(|(pos, ch)| match (pos, ch) {
             (start, '0'..='9') => self.read_number(start),
             (start, ch @ '+') | (start, ch @ '-') => self.read_number_or_symbol(start, ch),
@@ -44,7 +43,7 @@ impl<'a> Reader<'a> {
     }
 
     fn read_number(&mut self, start: usize) -> Result<Value, ReadError> {
-        let end = self.advance_while(|ch| ch.is_digit(10));
+        let end = self.advance_while(|ch| ch.is_ascii_digit());
         self.read_number_rest(start, end)
     }
 
@@ -68,7 +67,7 @@ impl<'a> Reader<'a> {
         match self.peek() {
             Some('0'..='9') => {
                 let start = if ch == '+' { start + 1 } else { start };
-                let end = self.advance_while(|ch| ch.is_digit(10));
+                let end = self.advance_while(|ch| ch.is_ascii_digit());
                 self.read_number_rest(start, end)
             }
             Some(ch) if is_symbol_tail(ch) => {
@@ -95,11 +94,11 @@ impl<'a> Reader<'a> {
         let peek = self.peek();
         if peek == Some('.') {
             self.chars.next();
-            let end = self.advance_while(|ch| ch.is_digit(10));
+            let end = self.advance_while(|ch| ch.is_ascii_digit());
             Ok(Value::Float(self.content[start..end].parse().unwrap()))
         } else if peek == Some('/') {
             self.chars.next();
-            let end = self.advance_while(|ch| ch.is_digit(10));
+            let end = self.advance_while(|ch| ch.is_ascii_digit());
             match parse_ratio(self.content[start..end].into()) {
                 Ok(ratio) => Ok(Value::Rational(ratio)),
                 _ => Err(ReadError {
@@ -164,12 +163,10 @@ impl<'a> Reader<'a> {
         let mut items = vec![];
         loop {
             self.skip_whitespace();
-
             if self.peek() == Some(close) {
                 self.chars.next();
                 return Ok(list(items));
             }
-
             match self.read() {
                 Some(Ok(value)) => items.push(value),
                 Some(Err(err)) => return Err(err),
@@ -191,14 +188,11 @@ impl<'a> Reader<'a> {
 
     fn skip_whitespace(&mut self) {
         loop {
-            // Skip whitespace.
             self.advance_while(|ch| ch.is_whitespace());
-            // Skip comment if present.
             if self.chars.clone().next().map_or(false, |(_, ch)| ch == ';') {
                 self.advance_while(|ch| ch != '\n');
                 self.chars.next();
             } else {
-                // Otherwise we're done.
                 return;
             }
         }
@@ -231,8 +225,7 @@ pub struct ReadError {
 }
 
 fn is_symbol_head(ch: char) -> bool {
-    match ch {
-        'a'..='z'
+    matches!(ch, 'a'..='z'
         | 'A'..='Z'
         | '.'
         | ','
@@ -256,17 +249,11 @@ fn is_symbol_head(ch: char) -> bool {
         | '`'
         | '|'
         | '\''
-        | '\\' => true,
-        _ => false,
-    }
+        | '\\')
 }
 
 fn is_symbol_tail(ch: char) -> bool {
-    is_symbol_head(ch)
-        || (match ch {
-            '0'..='9' | '/' => true,
-            _ => false,
-        })
+    is_symbol_head(ch) || (matches!(ch, '0'..='9' | '/'))
 }
 
 fn parse_ratio(s: &str) -> Result<Ratio, String> {

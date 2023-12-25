@@ -22,9 +22,9 @@ impl Value {
             Value::Float(v) => println!("{ident}'{v}' float"),
             Value::Rational(rat) => println!("{ident}'{}/{}' rational", rat.numer, rat.denom),
 
-            Value::ListParen(list) => dump_list(&list, &ident, '(', ')'),
-            Value::ListBracket(list) => dump_list(&list, &ident, '[', ']'),
-            Value::ListBrace(list) => dump_list(&list, &ident, '{', '}'),
+            Value::ListParen(list) => dump_list(list, ident, '(', ')'),
+            Value::ListBracket(list) => dump_list(list, ident, '[', ']'),
+            Value::ListBrace(list) => dump_list(list, ident, '{', '}'),
         }
     }
 }

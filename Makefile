@@ -3,6 +3,7 @@ FILES=$(shell find examples/ -name "*.tiny" -print)
 all:
 	make format
 	make run
+	make check
 	make test
 
 build:
@@ -24,7 +25,10 @@ test:
 format:
 	cargo fmt
 
+check:
+	cargo clippy --workspace
+
 clean:
 	cargo clean
 
-.PHONY: all build run run-clip test format
+.PHONY: all build run run-clip inter test format check clean

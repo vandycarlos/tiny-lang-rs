@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use reader::ReadError;
-    use reader::Reader;
+    use reader::{ReadError, Reader};
     use value::Value;
 
     #[test]
