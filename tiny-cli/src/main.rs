@@ -6,12 +6,12 @@ use std::io::Read;
 use tiny_library::reader::Reader;
 
 fn main() {
-    let args: Vec<String> = std::env::args().into_iter().skip(1).collect();
+    let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() > 1 {
         run_files(&args);
     } else {
-        // run_stdin();
-        inter();
+        run_stdin();
+        // inter();
     }
 }
 
@@ -31,6 +31,7 @@ fn run_stdin() {
     process("_stdin_.tiny", &content, false);
 }
 
+#[allow(dead_code)]
 fn inter() {
     let mut rl = DefaultEditor::new().unwrap();
     if rl.load_history("./history.txt").is_err() {

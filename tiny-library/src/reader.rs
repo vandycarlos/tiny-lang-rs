@@ -178,16 +178,14 @@ impl<'a> Reader<'a> {
 
             match self.read() {
                 Some(Ok(value)) => items.push(value),
-                Some(Err(err)) => {
-                    return Err(err);
-                }
+                Some(Err(err)) => return Err(err),
                 None => {
                     return Err(ReadError {
                         name: self.name.into(),
                         start,
                         end: self.content.len(),
                         message: format!("unclosed `{open}`"),
-                    });
+                    })
                 }
             }
         }
