@@ -6,15 +6,18 @@ all: run format check test
 build:
 	cargo build
 
+build-release:
+	cargo build --release
+
 run:
-	@cargo run --quiet -p tiny-cli -- $(FILES)
+	@cargo run --quiet -- $(FILES)
 
 run-clip:
-	wl-paste | DUMP=1 cargo run -p tiny-cli
+	wl-paste | DUMP=1 cargo run
 
 inter:
 	cp history-sample.txt history.txt
-	DUMP=1 cargo run -p tiny-cli
+	DUMP=1 cargo run
 
 test:
 	cargo test --workspace
@@ -30,3 +33,4 @@ clean:
 	cargo clean
 
 .PHONY: all build run run-clip inter test format check clean
+

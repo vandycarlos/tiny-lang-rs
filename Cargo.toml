@@ -3,7 +3,21 @@ name = "tiny-lang"
 version = "0.1.0"
 
 [workspace]
+resolver = "2"
 members = [ "tiny-cli", "tiny-library" ]
+
+default-members = [
+  "tiny-cli"
+]
+
+[profile.release]
+lto = "thin"
+
+[profile.opt]
+inherits = "release"
+lto = "fat"
+opt-level = 3
+codegen-units = 1
 
 [workspace.package]
 version = "0.1.0"
@@ -15,3 +29,4 @@ description = "A Lisp like programming language"
 repository = "https://github.com/vandycarlos/tiny-lang"
 homepage = "https://github.com/vandycarlos/tiny-lang"
 documentation = "https://docs.rs/tiny-lang"
+
