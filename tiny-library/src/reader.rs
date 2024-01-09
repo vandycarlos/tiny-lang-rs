@@ -85,7 +85,7 @@ impl<'a> Reader<'a> {
                 name: self.name.into(),
                 start,
                 end: start,
-                message: format!("unespected char '{char}'"),
+                message: format!("unexpected char '{char}'"),
             }),
         }
     }
